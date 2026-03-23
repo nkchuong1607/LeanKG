@@ -127,3 +127,32 @@ pub struct ToolDefinition {
     pub description: String,
     pub input_schema: Value,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_list_tools_returns_tools() {
+        let tools = ToolRegistry::list_tools();
+        assert!(!tools.is_empty());
+    }
+
+    #[test]
+    fn test_list_tools_contains_expected() {
+        let tools = ToolRegistry::list_tools();
+        let names: Vec<_> = tools.iter().map(|t| t.name.as_str()).collect();
+        assert!(names.contains(&"query_file"));
+        assert!(names.contains(&"get_dependencies"));
+        assert!(names.contains(&"get_impact_radius"));
+    }
+
+    #[test]
+    fn test_tool_definitions_have_schemas() {
+        let tools = ToolRegistry::list_tools();
+        for tool in &tools {
+            assert!(!tool.description.is_empty());
+            assert!(tool.input_schema.is_object());
+        }
+    }
+}

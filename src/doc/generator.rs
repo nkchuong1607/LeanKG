@@ -1,15 +1,25 @@
-use crate::db::models::CodeElement;
+use crate::db::models::{CodeElement, BusinessLogic};
 use crate::graph::GraphEngine;
 use std::path::PathBuf;
 
 pub struct DocGenerator {
     graph: GraphEngine,
     output_path: PathBuf,
+    templates_path: PathBuf,
 }
 
 impl DocGenerator {
     pub fn new(graph: GraphEngine, output_path: PathBuf) -> Self {
-        Self { graph, output_path }
+        Self { 
+            graph, 
+            output_path: output_path.clone(),
+            templates_path: output_path.join("templates"),
+        }
+    }
+
+    pub fn with_templates_path(mut self, templates_path: PathBuf) -> Self {
+        self.templates_path = templates_path;
+        self
     }
 
     pub async fn generate_for_element(
@@ -36,6 +46,70 @@ impl DocGenerator {
         }
 
         Ok(output)
+    }
+
+    pub async fn generate_for_element_with_annotation(
+        &self,
+        qualified_name: &str,
+        annotation: &BusinessLogic,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let mut output = self.generate_for_element(qualified_name).await?;
+        
+        output.push_str("\n## Business Logic\n\n");
+        output.push_str(&format!("{}\n", annotation.description));
+        
+        if let Some(ref story) = annotation.user_story_id {
+            output.push_str(&format!("\n**User Story:** {}\n", story));
+        }
+        if let Some(ref feature) = annotation.feature_id {
+            output.push_str(&format!("\n**Feature:** {}\n", feature));
+        }
+        
+        Ok(output)
+    }
+
+    pub async fn generate_for_element_with_template(
+        &self,
+        qualified_name: &str,
+        template_name: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let element = self.graph.find_element(qualified_name).await?;
+        let relationships = self.graph.get_relationships(qualified_name).await?;
+        
+        let rel_strings: Vec<String> = relationships.iter()
+            .map(|r| format!("{}: {}", r.rel_type, r.target_qualified))
+            .collect();
+
+        let template_engine = crate::doc::TemplateEngine::new(self.templates_path.clone());
+        
+        if let Some(elem) = element.as_ref() {
+            template_engine.render_element_template(
+                template_name,
+                &elem.qualified_name,
+                &elem.element_type,
+                &rel_strings,
+            )
+        } else {
+            Err("Element not found".into())
+        }
+    }
+
+    pub async fn regenerate_for_file(
+        &self,
+        file_path: &str,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let elements = self.graph.all_elements().await?;
+        let file_elements: Vec<&CodeElement> = elements.iter()
+            .filter(|e| e.file_path == file_path)
+            .collect();
+        
+        let mut regenerated = Vec::new();
+        for elem in file_elements {
+            let _ = self.generate_for_element(&elem.qualified_name).await?;
+            regenerated.push(elem.qualified_name.clone());
+        }
+        
+        Ok(regenerated)
     }
 
     pub async fn generate_agents_md(&self) -> Result<String, Box<dyn std::error::Error>> {

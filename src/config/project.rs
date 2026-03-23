@@ -86,4 +86,31 @@ mod tests {
         assert!(config.mcp.enabled);
         assert_eq!(config.mcp.port, 3000);
     }
+
+    #[test]
+    fn test_config_project_settings() {
+        let config = ProjectConfig::default();
+        assert_eq!(config.project.root, PathBuf::from("./src"));
+        assert_eq!(
+            config.project.languages,
+            vec!["go", "typescript", "python"]
+        );
+    }
+
+    #[test]
+    fn test_config_indexer_excludes() {
+        let config = ProjectConfig::default();
+        assert!(config.indexer.exclude.contains(&"**/node_modules/**".to_string()));
+        assert!(config.indexer.exclude.contains(&"**/vendor/**".to_string()));
+        assert!(config.indexer.include.contains(&"*.go".to_string()));
+    }
+
+    #[test]
+    fn test_config_web_documentation() {
+        let config = ProjectConfig::default();
+        assert!(config.web.enabled);
+        assert_eq!(config.web.port, 8080);
+        assert_eq!(config.documentation.output, PathBuf::from("./docs"));
+        assert_eq!(config.documentation.templates, vec!["agents", "claude"]);
+    }
 }

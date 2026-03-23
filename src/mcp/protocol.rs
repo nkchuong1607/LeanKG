@@ -41,3 +41,24 @@ impl MCPResponse {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mcp_response_success() {
+        let resp = MCPResponse::success(Some(1), serde_json::json!({"data": "test"}));
+        assert_eq!(resp.jsonrpc, "2.0");
+        assert!(resp.result.is_some());
+        assert!(resp.error.is_none());
+    }
+
+    #[test]
+    fn test_mcp_response_error() {
+        let resp = MCPResponse::error(Some(2), -32600, "Invalid request".to_string());
+        assert!(resp.result.is_none());
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.as_ref().unwrap().code, -32600);
+    }
+}

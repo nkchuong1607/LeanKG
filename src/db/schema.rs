@@ -30,5 +30,16 @@ pub async fn init_db(db_path: &Path) -> Result<Surreal<Db>, Box<dyn std::error::
         DEFINE INDEX target ON relationships COLUMNS target_qualified;
     ").await?;
 
+    db.query("
+        DEFINE TABLE business_logic SCHEMAFULL;
+        DEFINE FIELD element_qualified ON business_logic TYPE string;
+        DEFINE FIELD description ON business_logic TYPE string;
+        DEFINE FIELD user_story_id ON business_logic TYPE option<string>;
+        DEFINE FIELD feature_id ON business_logic TYPE option<string>;
+        DEFINE INDEX element ON business_logic COLUMNS element_qualified;
+        DEFINE INDEX user_story ON business_logic COLUMNS user_story_id;
+        DEFINE INDEX feature ON business_logic COLUMNS feature_id;
+    ").await?;
+
     Ok(db)
 }

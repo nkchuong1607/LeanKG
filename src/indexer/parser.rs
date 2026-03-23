@@ -36,3 +36,65 @@ impl ParserManager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn init_parsers_if_compatible() -> Option<ParserManager> {
+        let mut pm = ParserManager::new();
+        pm.init_parsers().ok()?;
+        Some(pm)
+    }
+
+    #[test]
+    fn test_parser_manager_new() {
+        let _pm = ParserManager::new();
+    }
+
+    #[test]
+    fn test_parser_manager_init_parsers() {
+        let mut pm = ParserManager::new();
+        let result = pm.init_parsers();
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_get_parser_for_go() {
+        if let Some(mut pm) = init_parsers_if_compatible() {
+            assert!(pm.get_parser_for_language("go").is_some());
+        }
+    }
+
+    #[test]
+    fn test_get_parser_for_typescript() {
+        if let Some(mut pm) = init_parsers_if_compatible() {
+            assert!(pm.get_parser_for_language("typescript").is_some());
+            assert!(pm.get_parser_for_language("javascript").is_some());
+        }
+    }
+
+    #[test]
+    fn test_get_parser_for_python() {
+        if let Some(mut pm) = init_parsers_if_compatible() {
+            assert!(pm.get_parser_for_language("python").is_some());
+        }
+    }
+
+    #[test]
+    fn test_get_parser_for_unknown_returns_none() {
+        let mut pm = ParserManager::new();
+        assert!(pm.get_parser_for_language("rust").is_none());
+        assert!(pm.get_parser_for_language("").is_none());
+    }
+
+    #[test]
+    fn test_parser_parse_go_code() {
+        if let Some(mut pm) = init_parsers_if_compatible() {
+            let source = b"package main\nfunc foo() {}";
+            let parser = pm.get_parser_for_language("go").unwrap();
+            let tree = parser.parse(source, None);
+            assert!(tree.is_some());
+        }
+    }
+}

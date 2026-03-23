@@ -40,3 +40,36 @@ pub struct Document {
     pub generated_from: Vec<String>,
     pub last_updated: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_code_element_creation() {
+        let elem = CodeElement {
+            qualified_name: "src/main.rs::main".to_string(),
+            element_type: "function".to_string(),
+            name: "main".to_string(),
+            file_path: "src/main.rs".to_string(),
+            line_start: 1,
+            line_end: 5,
+            language: "rust".to_string(),
+            parent_qualified: None,
+            metadata: serde_json::json!({}),
+        };
+        assert_eq!(elem.name, "main");
+    }
+
+    #[test]
+    fn test_relationship_creation() {
+        let rel = Relationship {
+            id: None,
+            source_qualified: "a.go".to_string(),
+            target_qualified: "b.go".to_string(),
+            rel_type: "imports".to_string(),
+            metadata: serde_json::json!({}),
+        };
+        assert_eq!(rel.rel_type, "imports");
+    }
+}

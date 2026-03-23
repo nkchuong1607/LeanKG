@@ -52,4 +52,38 @@ pub enum CLICommand {
         #[arg(long, default_value = "graph.html")]
         output: String,
     },
+    /// Annotate code element with business logic description
+    Annotate {
+        /// Element qualified name (e.g., src/main.rs::main)
+        element: String,
+        /// Business logic description
+        #[arg(long, short)]
+        description: String,
+        /// User story ID (optional)
+        #[arg(long)]
+        user_story: Option<String>,
+        /// Feature ID (optional)
+        #[arg(long)]
+        feature: Option<String>,
+    },
+    /// Link code element to user story or feature
+    Link {
+        /// Element qualified name
+        element: String,
+        /// User story or feature ID
+        id: String,
+        /// Link type: story or feature
+        #[arg(long, default_value = "story")]
+        kind: String,
+    },
+    /// Search business logic annotations
+    SearchAnnotations {
+        /// Search query
+        query: String,
+    },
+    /// Show annotations for an element
+    ShowAnnotations {
+        /// Element qualified name
+        element: String,
+    },
 }
