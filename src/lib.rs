@@ -11,4 +11,6 @@ pub mod indexer;
 pub mod mcp;
 pub mod watcher;
 pub mod wasm;
+
+#[cfg(not(target_arch = "wasm32"))]
 pub mod web;
