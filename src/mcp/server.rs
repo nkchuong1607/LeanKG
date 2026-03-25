@@ -85,7 +85,9 @@ impl MCPServer {
     }
 
     pub async fn serve_stdio(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.auto_init_if_needed().await?;
+        if let Err(e) = self.auto_init_if_needed().await {
+            tracing::warn!("Auto-init skipped: {}. Server will operate in uninitialized state.", e);
+        }
 
         if let Some(ref watch_path) = self.watch_path {
             let db_path = self.db_path.clone();
