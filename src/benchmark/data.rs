@@ -43,3 +43,20 @@ impl PromptCategory {
         Ok(categories)
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OverheadResult {
+    pub token_delta: i32,
+    pub token_delta_percent: f32,
+    pub time_delta: f32,
+}
+
+impl BenchmarkResult {
+    pub fn overhead(&self, other: &BenchmarkResult) -> OverheadResult {
+        OverheadResult {
+            token_delta: self.total_tokens as i32 - other.total_tokens as i32,
+            token_delta_percent: self.token_percent - other.token_percent,
+            time_delta: self.build_time_seconds - other.build_time_seconds,
+        }
+    }
+}
