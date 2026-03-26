@@ -13,11 +13,12 @@ use rmcp::service::{serve_server, RoleServer};
 use rmcp::transport::stdio;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use parking_lot::RwLock;
+use tokio::sync::RwLock as TokioRwLock;
 
 pub struct MCPServer {
-    auth_config: Arc<RwLock<AuthConfig>>,
-    db_path: PathBuf,
+    auth_config: Arc<TokioRwLock<AuthConfig>>,
+    db_path: Arc<RwLock<PathBuf>>,
     graph_engine: Arc<parking_lot::Mutex<Option<GraphEngine>>>,
     watch_path: Option<PathBuf>,
 }
@@ -44,8 +45,8 @@ impl Clone for MCPServer {
 impl MCPServer {
     pub fn new(db_path: std::path::PathBuf) -> Self {
         Self {
-            auth_config: Arc::new(RwLock::new(AuthConfig::default())),
-            db_path,
+            auth_config: Arc::new(TokioRwLock::new(AuthConfig::default())),
+            db_path: Arc::new(RwLock::new(db_path)),
             graph_engine: Arc::new(parking_lot::Mutex::new(None)),
             watch_path: None,
         }
@@ -53,15 +54,19 @@ impl MCPServer {
 
     pub fn new_with_watch(db_path: std::path::PathBuf, watch_path: std::path::PathBuf) -> Self {
         Self {
-            auth_config: Arc::new(RwLock::new(AuthConfig::default())),
-            db_path,
+            auth_config: Arc::new(TokioRwLock::new(AuthConfig::default())),
+            db_path: Arc::new(RwLock::new(db_path)),
             graph_engine: Arc::new(parking_lot::Mutex::new(None)),
             watch_path: Some(watch_path),
         }
     }
 
-    pub fn db_path(&self) -> &std::path::PathBuf {
-        &self.db_path
+    pub fn db_path(&self) -> std::sync::Arc<parking_lot::RwLock<std::path::PathBuf>> {
+        self.db_path.clone()
+    }
+    
+    fn get_db_path(&self) -> std::path::PathBuf {
+        self.db_path.read().clone()
     }
 
     pub async fn auth_config_read(&self) -> tokio::sync::RwLockReadGuard<'_, AuthConfig> {
@@ -75,8 +80,9 @@ impl MCPServer {
                 return Ok(ge.clone());
             }
         }
-        let db_path = self.db_path.canonicalize()
-            .or_else(|_| std::env::current_dir().map(|d| d.join(&self.db_path)))
+        let db_path = self.get_db_path();
+        let db_path = db_path.canonicalize()
+            .or_else(|_| std::env::current_dir().map(|d| d.join(&db_path)))
             .map_err(|e| format!("Failed to resolve db path: {}", e))?;
         
         if !db_path.exists() {
@@ -102,7 +108,7 @@ impl MCPServer {
         }
 
         if let Some(ref watch_path) = self.watch_path {
-            let db_path = self.db_path.clone();
+            let db_path = self.get_db_path();
             let watch_path = watch_path.clone();
             tokio::spawn(async move {
                 let (tx, rx) = tokio::sync::mpsc::channel(100);
@@ -146,7 +152,7 @@ impl MCPServer {
 
         tracing::info!("Auto-init: Created .leankg/ and leankg.yaml at {}", project_root.display());
 
-        let db_path = self.db_path.clone();
+        let db_path = self.get_db_path();
         tokio::fs::create_dir_all(&db_path).await.map_err(|e| format!("Failed to create db path: {}", e))?;
 
         let db = init_db(&db_path).map_err(|e| format!("Database error: {}", e))?;
@@ -193,7 +199,7 @@ impl MCPServer {
             return Ok(());
         }
 
-        let db_path = &self.db_path;
+        let db_path = self.get_db_path();
         let db_file = db_path.join("leankg.db");
         
         if !db_file.exists() {
@@ -234,7 +240,7 @@ impl MCPServer {
         tracing::info!("Index may be stale (last commit: {}, db modified: {}), running incremental index...", 
             last_commit_time, db_modified);
 
-        let db = init_db(&self.db_path).map_err(|e| format!("Database error: {}", e))?;
+        let db = init_db(&self.get_db_path()).map_err(|e| format!("Database error: {}", e))?;
         let graph_engine = crate::graph::GraphEngine::new(db);
         let mut parser_manager = crate::indexer::ParserManager::new();
         parser_manager.init_parsers().map_err(|e| format!("Parser init error: {}", e))?;
@@ -293,9 +299,25 @@ impl MCPServer {
         arguments: serde_json::Map<String, serde_json::Value>,
     ) -> Result<serde_json::Value, String> {
         let project_root = self.find_project_root()?;
-        tracing::info!("execute_tool called. project_root={}, db_path={}", project_root.display(), self.db_path.display());
+        tracing::info!("execute_tool called. project_root={}, db_path={}", project_root.display(), self.get_db_path().display());
+        
+        if tool_name == "mcp_init" {
+            if let Some(path) = arguments.get("path").and_then(|v| v.as_str()) {
+                let new_db_path = std::path::PathBuf::from(path);
+                {
+                    let mut guard = self.graph_engine.lock();
+                    *guard = None;
+                }
+                {
+                    let mut db_path_guard = parking_lot::RwLock::write(&self.db_path);
+                    *db_path_guard = new_db_path.clone();
+                }
+                tracing::info!("Updated db_path to {}", new_db_path.display());
+            }
+        }
+        
         let graph_engine = self.get_graph_engine()?;
-        let handler = ToolHandler::new(graph_engine, self.db_path.clone());
+        let handler = ToolHandler::new(graph_engine, self.get_db_path());
         let args_value = serde_json::Value::Object(arguments);
         handler.execute_tool(tool_name, &args_value).await
     }

@@ -317,6 +317,9 @@ mod server_tests {
     fn test_mcp_server_with_custom_db_path() {
         let db_path = std::path::PathBuf::from("/custom/path/.leankg");
         let server = MCPServer::new(db_path.clone());
-        assert_eq!(server.db_path(), &db_path);
+        let binding = server.db_path();
+        let guard = binding.read();
+        let server_path = &*guard;
+        assert_eq!(server_path, &db_path);
     }
 }
