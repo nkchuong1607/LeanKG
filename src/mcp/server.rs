@@ -111,7 +111,7 @@ impl MCPServer {
 
         if leankg_exists {
             tracing::info!("LeanKG project already initialized at {}", project_root.display());
-            return Ok(());
+            return self.auto_index_if_needed().await;
         }
 
         tracing::info!("LeanKG not found, searching for project root...");
@@ -150,6 +150,100 @@ impl MCPServer {
         }
 
         tracing::info!("Auto-init complete");
+        Ok(())
+    }
+
+    async fn auto_index_if_needed(&self) -> Result<(), String> {
+        let project_root = self.find_project_root()?;
+        let config_path = project_root.join(".leankg/leankg.yaml");
+        
+        let config = if config_path.exists() {
+            let content = std::fs::read_to_string(&config_path)
+                .map_err(|e| format!("Failed to read config: {}", e))?;
+            serde_yaml::from_str::<crate::config::ProjectConfig>(&content)
+                .map_err(|e| format!("Failed to parse config: {}", e))?
+        } else {
+            crate::config::ProjectConfig::default()
+        };
+
+        if !config.mcp.auto_index_on_start {
+            tracing::info!("Auto-indexing on start is disabled in config");
+            return Ok(());
+        }
+
+        let db_path = &self.db_path;
+        let db_file = db_path.join("leankg.db");
+        
+        if !db_file.exists() {
+            tracing::info!("Database file does not exist, skipping auto-index");
+            return Ok(());
+        }
+
+        if !crate::indexer::GitAnalyzer::is_git_repo() {
+            tracing::info!("Not a git repo, skipping auto-index");
+            return Ok(());
+        }
+
+        let last_commit_time = match crate::indexer::GitAnalyzer::get_last_commit_time() {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!("Failed to get last commit time: {}", e);
+                return Ok(());
+            }
+        };
+
+        let db_modified = std::fs::metadata(&db_file)
+            .and_then(|m| m.modified())
+            .map(|t| {
+                t.duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0);
+
+        let threshold_seconds = (config.mcp.auto_index_threshold_minutes * 60) as i64;
+        
+        if last_commit_time <= db_modified + threshold_seconds {
+            tracing::info!("Index is fresh (last commit: {}, db modified: {}), skipping auto-index", 
+                last_commit_time, db_modified);
+            return Ok(());
+        }
+
+        tracing::info!("Index may be stale (last commit: {}, db modified: {}), running incremental index...", 
+            last_commit_time, db_modified);
+
+        let db = init_db(&self.db_path).map_err(|e| format!("Database error: {}", e))?;
+        let graph_engine = crate::graph::GraphEngine::new(db);
+        let mut parser_manager = crate::indexer::ParserManager::new();
+        parser_manager.init_parsers().map_err(|e| format!("Parser init error: {}", e))?;
+
+        let root_str = project_root.to_string_lossy().to_string();
+        match crate::indexer::incremental_index_sync(&graph_engine, &mut parser_manager, &root_str).await {
+            Ok(result) => {
+                tracing::info!("Auto-index: Processed {} files ({} elements)", 
+                    result.total_files_processed, result.elements_indexed);
+            }
+            Err(e) => {
+                tracing::warn!("Auto-index failed: {}, falling back to full index", e);
+                let files = crate::indexer::find_files_sync(&root_str)
+                    .map_err(|fe| format!("Find files error: {}", fe))?;
+                let mut indexed = 0;
+                for file_path in &files {
+                    if crate::indexer::index_file_sync(&graph_engine, &mut parser_manager, file_path).is_ok() {
+                        indexed += 1;
+                    }
+                }
+                tracing::info!("Auto-index (fallback): Indexed {} files", indexed);
+            }
+        }
+
+        if let Ok(true) = project_root.join("docs").try_exists() {
+            if let Ok(doc_result) = crate::doc_indexer::index_docs_directory(project_root.join("docs").as_path(), &graph_engine) {
+                tracing::info!("Auto-index: Indexed {} documents", doc_result.documents.len());
+            }
+        }
+
+        tracing::info!("Auto-index complete");
         Ok(())
     }
 

@@ -28,6 +28,9 @@ pub struct McpConfig {
     pub enabled: bool,
     pub port: u16,
     pub auth_token: String,
+    pub auto_index_on_start: bool,
+    pub auto_index_threshold_minutes: u64,
+    pub index_on_first_call: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +65,9 @@ impl Default for ProjectConfig {
                 enabled: true,
                 port: 3000,
                 auth_token: "".to_string(),
+                auto_index_on_start: true,
+                auto_index_threshold_minutes: 5,
+                index_on_first_call: true,
             },
             web: WebConfig {
                 enabled: true,

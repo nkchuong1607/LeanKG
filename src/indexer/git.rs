@@ -147,6 +147,21 @@ impl GitAnalyzer {
             None
         }
     }
+
+    pub fn get_last_commit_time() -> Result<i64, Box<dyn std::error::Error>> {
+        let output = Command::new("git")
+            .args(["log", "-1", "--format=%ct", "HEAD"])
+            .output()?;
+
+        if !output.status.success() {
+            return Err("Failed to get last commit time".into());
+        }
+
+        let timestamp_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        timestamp_str
+            .parse::<i64>()
+            .map_err(|e| format!("Failed to parse timestamp: {}", e).into())
+    }
 }
 
 pub fn find_dependents(target_file: &str, all_relationships: &[(String, String)]) -> Vec<String> {
