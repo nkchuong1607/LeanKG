@@ -4,6 +4,10 @@ use crate::graph::cache::QueryCache;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+fn escape_datalog(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 #[derive(Clone)]
 pub struct GraphEngine {
     db: CozoDb,
@@ -99,32 +103,27 @@ impl GraphEngine {
         &self,
         file_path: &str,
     ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
+        let escaped_path = escape_datalog(file_path);
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], file_path = "{}""#,
-            file_path
+            r#"?[target_qualified, rel_type, metadata] := *relationships[source_qualified, target_qualified, rel_type, metadata], source_qualified = "{}", rel_type = "imports""#,
+            escaped_path
         );
 
         let result = self.db.run_script(&query, std::collections::BTreeMap::new())?;
         let rows = result.rows;
 
-        let elements: Vec<CodeElement> = rows
+        let target_qns: Vec<String> = rows
             .iter()
-            .map(|row| {
-                let parent_qualified = row[7].as_str().map(String::from);
-                let metadata_str = row[8].as_str().unwrap_or("{}");
-                CodeElement {
-                    qualified_name: row[0].as_str().unwrap_or("").to_string(),
-                    element_type: row[1].as_str().unwrap_or("").to_string(),
-                    name: row[2].as_str().unwrap_or("").to_string(),
-                    file_path: row[3].as_str().unwrap_or("").to_string(),
-                    line_start: row[4].as_i64().unwrap_or(0) as u32,
-                    line_end: row[5].as_i64().unwrap_or(0) as u32,
-                    language: row[6].as_str().unwrap_or("").to_string(),
-                    parent_qualified,
-                    metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
-                }
-            })
+            .map(|row| row[0].as_str().unwrap_or("").to_string())
+            .filter(|s| !s.is_empty())
             .collect();
+
+        let mut elements = Vec::new();
+        for qn in &target_qns {
+            if let Some(elem) = self.find_element(qn)? {
+                elements.push(elem);
+            }
+        }
 
         if !elements.is_empty() {
             let qns: Vec<String> = elements.iter().map(|e| e.qualified_name.clone()).collect();
@@ -378,9 +377,10 @@ impl GraphEngine {
     }
 
     pub fn get_documented_by(&self, element_qualified: &str) -> Result<Vec<DocLink>, Box<dyn std::error::Error>> {
+        let escaped = escape_datalog(element_qualified);
         let query = format!(
-            r#"?[source_qualified, target_qualified, rel_type, metadata] := *relationships[source_qualified, target_qualified, rel_type, metadata], target_qualified = "{}", rel_type = "documented_by""#,
-            element_qualified
+            r#"?[source_qualified, target_qualified, rel_type, metadata] := *relationships[source_qualified, target_qualified, rel_type, metadata], source_qualified = "{}", rel_type = "documented_by""#,
+            escaped
         );
 
         let result = self.db.run_script(&query, std::collections::BTreeMap::new())?;
@@ -910,5 +910,72 @@ impl GraphEngine {
         });
 
         Ok(elements)
+    }
+
+    fn run_element_query(
+        &self,
+        query: &str,
+    ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
+        let result = self.db.run_script(query, Default::default())?;
+        Ok(result.rows.iter().map(|row| {
+            let parent_qualified = row[7].as_str().map(String::from);
+            let metadata_str = row[8].as_str().unwrap_or("{}");
+            CodeElement {
+                qualified_name: row[0].as_str().unwrap_or("").to_string(),
+                element_type: row[1].as_str().unwrap_or("").to_string(),
+                name: row[2].as_str().unwrap_or("").to_string(),
+                file_path: row[3].as_str().unwrap_or("").to_string(),
+                line_start: row[4].as_i64().unwrap_or(0) as u32,
+                line_end: row[5].as_i64().unwrap_or(0) as u32,
+                language: row[6].as_str().unwrap_or("").to_string(),
+                parent_qualified,
+                metadata: serde_json::from_str(metadata_str)
+                    .unwrap_or(serde_json::json!({})),
+            }
+        }).collect())
+    }
+
+    pub fn search_by_name_typed(
+        &self,
+        name: &str,
+        element_type: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
+        let safe_name = escape_datalog(&name.to_lowercase());
+        let type_clause = match element_type {
+            Some(t) => format!(r#", element_type = "{}""#, escape_datalog(t)),
+            None => String::new(),
+        };
+        let query = format!(
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata]
+               := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata]{type_clause},
+              regex_matches(lowercase(name), "{pattern}")
+           :limit {limit}"#,
+            type_clause = type_clause,
+            pattern = safe_name,
+            limit = limit,
+        );
+        self.run_element_query(&query)
+    }
+
+    pub fn find_elements_by_name_exact(
+        &self,
+        name: &str,
+        element_type: Option<&str>,
+    ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
+        let safe_name = escape_datalog(name);
+        let type_clause = match element_type {
+            Some(t) => format!(r#", element_type = "{}""#, escape_datalog(t)),
+            None => String::new(),
+        };
+        let query = format!(
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata]
+               := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata]{type_clause},
+              name = "{name}"
+           :limit 20"#,
+            type_clause = type_clause,
+            name = safe_name,
+        );
+        self.run_element_query(&query)
     }
 }
