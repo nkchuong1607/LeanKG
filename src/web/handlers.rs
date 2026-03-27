@@ -224,7 +224,6 @@ pub async fn graph() -> axum::response::Html<String> {
                 <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
                 <button class="filter-btn" data-filter="document" onclick="setFilter('document')">Document</button>
                 <button class="filter-btn" data-filter="function" onclick="setFilter('function')">Function</button>
-                <button class="filter-btn" data-filter="mapping" onclick="setFilter('mapping')">Mapping</button>
             </div>
             <div id="graph-container"><div class="loading">Loading graph data...</div></div>
         </div>
@@ -245,11 +244,11 @@ pub async fn graph() -> axum::response::Html<String> {
         <script>
             let svg, g, zoom, nodes, labelsVisible = true;
             let graphDataCache = null;
+            let currentGraphData = null;
             let currentFilter = 'all';
             const width = 1400, height = 600;
             const docTypes = ['document', 'doc_section'];
             const funcTypes = ['function', 'class', 'struct'];
-            const mappingRels = ['imports', 'calls', 'references', 'documented_by', 'tested_by', 'tests', 'contains'];
             function isTestElement(node) {
                 const qn = node.id.toLowerCase();
                 const fp = node.file_path.toLowerCase();
@@ -264,11 +263,53 @@ pub async fn graph() -> axum::response::Html<String> {
                 const filteredNodes = data.nodes.filter(n => nodeIds.has(n.id));
                 return { nodes: filteredNodes, edges: filteredEdges };
             }
+            function limitGraphData(data, maxNodes = 500, maxEdges = 1000) {
+                const connectedNodes = new Set();
+                data.edges.forEach(e => { connectedNodes.add(e.source); connectedNodes.add(e.target); });
+                const connectedOnly = data.nodes.filter(n => connectedNodes.has(n.id));
+                if (connectedOnly.length <= maxNodes && data.edges.length <= maxEdges) {
+                    return data;
+                }
+                const nodeConnectCount = {};
+                data.edges.forEach(e => {
+                    nodeConnectCount[e.source] = (nodeConnectCount[e.source] || 0) + 1;
+                    nodeConnectCount[e.target] = (nodeConnectCount[e.target] || 0) + 1;
+                });
+                const sortedNodes = [...connectedOnly].sort((a, b) => 
+                    (nodeConnectCount[b.id] || 0) - (nodeConnectCount[a.id] || 0)
+                );
+                const topNodeIds = new Set(sortedNodes.slice(0, maxNodes).map(n => n.id));
+                const filteredNodes = data.nodes.filter(n => topNodeIds.has(n.id));
+                const filteredEdges = data.edges.filter(e => 
+                    topNodeIds.has(e.source) && topNodeIds.has(e.target)
+                ).slice(0, maxEdges);
+                return { nodes: filteredNodes, edges: filteredEdges };
+            }
+            function fitToFrame(currentData) {
+                if (!svg || !g || !currentData || currentData.nodes.length === 0) return;
+                const bounds = g.node().getBBox();
+                const fullWidth = width;
+                const fullHeight = height;
+                const bWidth = bounds.width;
+                const bHeight = bounds.height;
+                if (bWidth === 0 || bHeight === 0) return;
+                const midX = bounds.x + bWidth / 2;
+                const midY = bounds.y + bHeight / 2;
+                const scale = 0.85 / Math.max(bWidth / fullWidth, bHeight / fullHeight);
+                const transform = d3.zoomIdentity
+                    .translate(fullWidth / 2, fullHeight / 2)
+                    .scale(Math.min(scale, 2))
+                    .translate(-midX, -midY);
+                svg.transition().duration(750).call(zoom.transform, transform);
+            }
             async function loadGraph() {
                 try {
                     const response = await fetch('/api/graph/data');
                     const data = await response.json();
-                    if (data.success && data.data) { graphDataCache = filterTestElements(data.data); initGraph(graphDataCache); }
+                    if (data.success && data.data) { 
+                        graphDataCache = limitGraphData(filterTestElements(data.data)); 
+                        initGraph(graphDataCache); 
+                    }
                     else document.getElementById('graph-container').innerHTML = '<div class="error">No graph data available. Index your codebase first.</div>';
                 } catch (e) {
                     document.getElementById('graph-container').innerHTML = '<div class="error">Failed to load graph: ' + e.message + '</div>';
@@ -293,20 +334,19 @@ pub async fn graph() -> axum::response::Html<String> {
                 } else if (currentFilter === 'function') {
                     data.nodes.forEach(n => { if (funcTypes.includes(n.element_type)) { filteredNodes.push(n); nodeIds.add(n.id); } });
                     data.edges.forEach(e => { if (nodeIds.has(e.source) && nodeIds.has(e.target)) filteredEdges.push(e); });
-                } else if (currentFilter === 'mapping') {
-                    data.edges.forEach(e => { if (mappingRels.includes(e.rel_type)) { filteredEdges.push(e); nodeIds.add(e.source); nodeIds.add(e.target); } });
-                    data.nodes.forEach(n => { if (nodeIds.has(n.id)) filteredNodes.push(n); });
                 }
-                const result = { nodes: filteredNodes, edges: filteredEdges };
-                return filterOrphanedNodes(result);
+                return filterOrphanedNodes({ nodes: filteredNodes, edges: filteredEdges });
             }
             function filterOrphanedNodes(data) {
                 const connectedNodes = new Set();
                 data.edges.forEach(e => { connectedNodes.add(e.source); connectedNodes.add(e.target); });
                 const filteredNodes = data.nodes.filter(n => connectedNodes.has(n.id));
-                return { nodes: filteredNodes, edges: data.edges };
+                const nodeIds = new Set(filteredNodes.map(n => n.id));
+                const filteredEdges = data.edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+                return { nodes: filteredNodes, edges: filteredEdges };
             }
             function initGraph(fullData) {
+                currentGraphData = fullData;
                 const data = getFilteredData(fullData);
                 const container = document.getElementById('graph-container');
                 container.innerHTML = '';
@@ -315,21 +355,22 @@ pub async fn graph() -> axum::response::Html<String> {
                 svg.call(zoom);
                 g = svg.append('g');
                 const simulation = d3.forceSimulation(data.nodes)
-                    .force('link', d3.forceLink(data.edges).id(d => d.id).distance(100))
-                    .force('charge', d3.forceManyBody().strength(-300))
+                    .force('link', d3.forceLink(data.edges).id(d => d.id).distance(80))
+                    .force('charge', d3.forceManyBody().strength(-200))
                     .force('center', d3.forceCenter(width / 2, height / 2))
-                    .force('collision', d3.forceCollide().radius(30));
-                const link = g.append('g').selectAll('line').data(data.edges).join('line').attr('class', 'link').attr('stroke-width', 1.5);
+                    .force('collision', d3.forceCollide().radius(20));
+                const link = g.append('g').selectAll('line').data(data.edges).join('line').attr('class', 'link').attr('stroke-width', 1);
                 const node = g.append('g').selectAll('g').data(data.nodes).join('g').attr('class', 'node')
                     .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended));
                 const colors = {'file': '#2e7d32', 'function': '#1565c0', 'class': '#7b1fa2', 'module': '#e65100', 'document': '#e65100', 'doc_section': '#ff9800', 'struct': '#1565c0'};
-                node.append('circle').attr('r', 15).attr('fill', d => colors[d.element_type] || '#666');
-                node.append('text').text(d => d.label).attr('x', 20).attr('y', 5).style('display', labelsVisible ? 'block' : 'none');
+                node.append('circle').attr('r', 10).attr('fill', d => colors[d.element_type] || '#666');
+                node.append('text').text(d => d.label).attr('x', 15).attr('y', 4).style('display', labelsVisible ? 'block' : 'none').style('font-size', '10px');
                 node.on('click', (e, d) => { alert('Element: ' + d.label + '\nType: ' + d.element_type + '\nFile: ' + d.file_path); });
                 simulation.on('tick', () => {
                     link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
                     node.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
                 });
+                simulation.on('end', () => fitToFrame(data));
                 nodes = node;
             }
             function dragstarted(e) { if (!e.active) simulation.alphaTarget(0.3).restart(); e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; }
