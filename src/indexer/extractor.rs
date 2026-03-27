@@ -26,6 +26,56 @@ pub fn is_test_file(file_path: &str) -> bool {
     }
 }
 
+pub fn is_noise_call(name: &str) -> bool {
+    matches!(
+        name,
+        "println"
+            | "print"
+            | "eprintln"
+            | "format"
+            | "vec"
+            | "assert"
+            | "assert_eq"
+            | "assert_ne"
+            | "panic"
+            | "unwrap"
+            | "expect"
+            | "clone"
+            | "to_string"
+            | "into"
+            | "from"
+            | "len"
+            | "is_empty"
+            | "ok"
+            | "err"
+            | "map"
+            | "and_then"
+            | "or_else"
+            | "collect"
+            | "iter"
+            | "push"
+            | "pop"
+            | "insert"
+            | "get"
+            | "contains"
+            | "drop"
+            | "take"
+            | "skip"
+            | "next"
+            | "filter"
+            | "fold"
+            | "Some"
+            | "None"
+            | "Ok"
+            | "Err"
+            | "async"
+            | "await"
+            | "new"
+            | "with_capacity"
+            | "with_len"
+    ) || name.len() < 2
+}
+
 pub fn get_tested_file_path(file_path: &str) -> Option<String> {
     let path = Path::new(file_path);
     let file_name = path.file_name()?.to_str()?;
@@ -267,39 +317,45 @@ impl<'a> EntityExtractor<'a> {
     fn extract_go_implementations(
         &self,
         node: Node,
-        struct_name: String,
+        struct_qualified: String,
         relationships: &mut Vec<Relationship>,
     ) {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if child.kind() == "field_declaration_list" {
-                let mut field_cursor = child.walk();
-                for field in child.children(&mut field_cursor) {
-                    if field.kind() == "field_declaration" {
-                        if let Some(type_node) = field.child_by_field_name("type") {
-                            let type_str = std::str::from_utf8(
-                                self.source.get(type_node.byte_range()).unwrap_or(&[]),
-                            )
-                            .unwrap_or("");
+            if child.kind() != "field_declaration_list" {
+                continue;
+            }
+            let mut field_cursor = child.walk();
+            for field in child.children(&mut field_cursor) {
+                if field.kind() != "field_declaration" {
+                    continue;
+                }
+                let has_name = field.child_by_field_name("name").is_some();
+                if has_name {
+                    continue;
+                }
+                if let Some(type_node) = field.child_by_field_name("type") {
+                    let type_str =
+                        std::str::from_utf8(self.source.get(type_node.byte_range()).unwrap_or(&[]))
+                            .unwrap_or("")
+                            .trim_start_matches('*');
 
-                            if !type_str.is_empty() && type_str != "struct" {
-                                relationships.push(Relationship {
-                                    id: None,
-                                    source_qualified: struct_name.clone(),
-                                    target_qualified: format!(
-                                        "{}::{}",
-                                        self.file_path
-                                            .rsplit('/')
-                                            .next()
-                                            .unwrap_or("")
-                                            .trim_end_matches(".go"),
-                                        type_str
-                                    ),
-                                    rel_type: "implements".to_string(),
-                                    metadata: serde_json::json!({}),
-                                });
-                            }
-                        }
+                    if !type_str.is_empty() && !type_str.contains(' ') {
+                        relationships.push(Relationship {
+                            id: None,
+                            source_qualified: struct_qualified.clone(),
+                            target_qualified: format!(
+                                "{}::{}",
+                                self.file_path
+                                    .rsplit('/')
+                                    .next()
+                                    .unwrap_or("")
+                                    .trim_end_matches(".go"),
+                                type_str
+                            ),
+                            rel_type: "implements".to_string(),
+                            metadata: serde_json::json!({"embedded": true}),
+                        });
                     }
                 }
             }
@@ -422,13 +478,16 @@ impl<'a> EntityExtractor<'a> {
             if child.kind() == "identifier" {
                 if let Some(bytes) = self.source.get(child.byte_range()) {
                     if let Ok(name) = std::str::from_utf8(bytes) {
+                        if is_noise_call(name) {
+                            break;
+                        }
                         let parent_name = parent.unwrap_or("");
                         let source = if parent_name.is_empty() {
                             self.file_path.to_string()
                         } else {
                             format!("{}::{}", self.file_path, parent_name)
                         };
-                        let target_qualified = format!("{}::{}", self.file_path, name);
+                        let target_qualified = format!("__unresolved__{}", name);
                         relationships.push(Relationship {
                             id: None,
                             source_qualified: source,
@@ -436,7 +495,7 @@ impl<'a> EntityExtractor<'a> {
                             rel_type: "calls".to_string(),
                             metadata: serde_json::json!({
                                 "bare_name": name,
-                                "file_path": self.file_path,
+                                "callee_file_hint": self.file_path,
                             }),
                         });
                     }

@@ -978,4 +978,65 @@ impl GraphEngine {
         );
         self.run_element_query(&query)
     }
+
+    pub fn resolve_call_edges(&self) -> Result<usize, Box<dyn std::error::Error>> {
+        let query = r#"
+            ?[source_qualified, target_qualified, metadata]
+            := *relationships[source_qualified, target_qualified, "calls", metadata],
+               starts_with(target_qualified, "__unresolved__")
+        "#;
+        let result = self.db.run_script(query, Default::default())?;
+        let mut resolved = 0;
+
+        for row in &result.rows {
+            let source = row[0].as_str().unwrap_or("").to_string();
+            let unresolved = row[1].as_str().unwrap_or("").to_string();
+            let bare_name = unresolved.trim_start_matches("__unresolved__");
+            let meta_str = row[2].as_str().unwrap_or("{}");
+            let meta: serde_json::Value = serde_json::from_str(meta_str).unwrap_or_default();
+
+            let callee_file_hint = meta
+                .get("callee_file_hint")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            let lookup = format!(
+                r#"?[qn] := *code_elements[qn, et, "{bare}", fp, _, _, _, _, _],
+                              et = "function", starts_with(fp, "{hint}")
+                         :limit 1"#,
+                bare = escape_datalog(bare_name),
+                hint = escape_datalog(callee_file_hint),
+            );
+
+            if let Ok(res) = self.db.run_script(&lookup, Default::default()) {
+                if let Some(target_row) = res.rows.first() {
+                    if let Some(target_qn) = target_row[0].as_str() {
+                        self.db.run_script(
+                            &format!(
+                                r#"?[source_qualified, target_qualified, rel_type, metadata]
+                                   <- [["{}", "{}", "calls", "{}"]]
+                                   :put relationships {{source_qualified, target_qualified, rel_type, metadata}}"#,
+                                escape_datalog(&source),
+                                escape_datalog(target_qn),
+                                escape_datalog(meta_str),
+                            ),
+                            Default::default(),
+                        )?;
+                        resolved += 1;
+                    }
+                }
+            }
+
+            self.db.run_script(
+                &format!(
+                    r#":delete relationships where source_qualified = "{}" and target_qualified = "{}""#,
+                    escape_datalog(&source),
+                    escape_datalog(&unresolved),
+                ),
+                Default::default(),
+            )?;
+        }
+
+        Ok(resolved)
+    }
 }

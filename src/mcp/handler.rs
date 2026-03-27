@@ -255,11 +255,14 @@ impl ToolHandler {
             }
         }
 
+        let resolved = self.graph_engine.resolve_call_edges().unwrap_or(0);
+
         Ok(json!({
             "success": true,
-            "message": format!("Indexed {} files, {} skipped", indexed, skipped),
+            "message": format!("Indexed {} files, {} skipped, {} call edges resolved", indexed, skipped, resolved),
             "indexed": indexed,
             "skipped": skipped,
+            "resolved": resolved,
             "path": path
         }))
     }

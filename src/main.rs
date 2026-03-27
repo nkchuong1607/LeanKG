@@ -321,6 +321,18 @@ async fn index_codebase(
         println!("Skipped {} files (errors)", skipped);
     }
 
+    println!("Resolving call edges...");
+    match graph_engine.resolve_call_edges() {
+        Ok(count) => {
+            if count > 0 {
+                println!("  Resolved {} call edges", count);
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to resolve call edges: {}", e);
+        }
+    }
+
     let docs_path = std::path::Path::new("docs");
     if docs_path.exists() {
         println!("Indexing documentation at docs/...");
@@ -381,6 +393,18 @@ async fn incremental_index_codebase(
 
                 println!("Total files processed: {}", result.total_files_processed);
                 println!("Total elements indexed: {}", result.elements_indexed);
+
+                println!("Resolving call edges...");
+                match graph_engine.resolve_call_edges() {
+                    Ok(count) => {
+                        if count > 0 {
+                            println!("  Resolved {} call edges", count);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to resolve call edges: {}", e);
+                    }
+                }
             }
         }
         Err(e) => {

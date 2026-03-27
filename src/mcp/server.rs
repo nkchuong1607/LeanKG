@@ -172,6 +172,10 @@ impl MCPServer {
 
         tracing::info!("Auto-init: Indexed {} files", indexed);
 
+        if let Err(e) = graph_engine.resolve_call_edges() {
+            tracing::warn!("Auto-init: Failed to resolve call edges: {}", e);
+        }
+
         if let Ok(true) = std::path::Path::new("docs").try_exists() {
             if let Ok(doc_result) = crate::doc_indexer::index_docs_directory(std::path::Path::new("docs"), &graph_engine) {
                 tracing::info!("Auto-init: Indexed {} documents", doc_result.documents.len());
@@ -271,6 +275,10 @@ impl MCPServer {
                 }
                 tracing::info!("Auto-index (fallback): Indexed {} files", indexed);
             }
+        }
+
+        if let Err(e) = graph_engine.resolve_call_edges() {
+            tracing::warn!("Auto-index: Failed to resolve call edges: {}", e);
         }
 
         if let Ok(true) = project_root.join("docs").try_exists() {
