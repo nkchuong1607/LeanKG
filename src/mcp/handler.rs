@@ -435,10 +435,11 @@ impl ToolHandler {
     fn get_impact_radius(&self, args: &Value) -> Result<Value, String> {
         let file = args["file"].as_str().ok_or("Missing 'file' parameter")?;
         let depth = args["depth"].as_u64().unwrap_or(3) as u32;
+        let min_confidence = args["min_confidence"].as_f64().unwrap_or(0.0);
 
         let analyzer = ImpactAnalyzer::new(&self.graph_engine);
         let result = analyzer
-            .calculate_impact_radius(file, depth)
+            .calculate_impact_radius_with_confidence(file, depth, min_confidence)
             .map_err(|e| e.to_string())?;
 
         Ok(json!({
@@ -450,6 +451,15 @@ impl ToolHandler {
                 "name": e.name,
                 "type": e.element_type,
                 "file": e.file_path
+            })).collect::<Vec<_>>(),
+            "elements_with_confidence": result.affected_with_confidence.iter().map(|a| json!({
+                "qualified_name": a.element.qualified_name,
+                "name": a.element.name,
+                "type": a.element.element_type,
+                "file": a.element.file_path,
+                "confidence": a.confidence,
+                "severity": a.severity,
+                "depth": a.depth
             })).collect::<Vec<_>>()
         }))
     }

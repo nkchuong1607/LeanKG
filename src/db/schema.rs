@@ -36,7 +36,7 @@ fn init_schema(db: &CozoDb) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if !existing_relations.contains("relationships") {
-        let create_relationships = r#":create relationships {source_qualified: String, target_qualified: String, rel_type: String, metadata: String}"#;
+        let create_relationships = r#":create relationships {source_qualified: String, target_qualified: String, rel_type: String, confidence: Float, metadata: String}"#;
         if let Err(e) = db.run_script(create_relationships, Default::default()) {
             eprintln!("Failed to create relationships: {:?}", e);
         }

@@ -73,7 +73,20 @@ pub struct Relationship {
     pub source_qualified: String,
     pub target_qualified: String,
     pub rel_type: String,
+    pub confidence: f64,
     pub metadata: serde_json::Value,
+}
+
+impl Relationship {
+    pub fn severity(&self, depth: u32) -> &'static str {
+        if depth == 1 && self.confidence >= 0.85 {
+            "WILL BREAK"
+        } else if depth == 1 && self.confidence >= 0.60 {
+            "LIKELY AFFECTED"
+        } else {
+            "MAY BE AFFECTED"
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,9 +166,11 @@ mod tests {
             source_qualified: "a.go".to_string(),
             target_qualified: "b.go".to_string(),
             rel_type: "imports".to_string(),
+            confidence: 1.0,
             metadata: serde_json::json!({}),
         };
         assert_eq!(rel.rel_type, "imports");
+        assert_eq!(rel.confidence, 1.0);
     }
 
     #[test]

@@ -85,6 +85,7 @@ async fn test_doc_tracking_info_structure() {
         source_qualified: "src/main.rs::main".to_string(),
         target_qualified: "src/lib.rs::init".to_string(),
         rel_type: "imports".to_string(),
+        confidence: 1.0,
         metadata: serde_json::json!({}),
     };
 

@@ -144,17 +144,11 @@ impl GraphEngine {
         &self,
         source: &str,
     ) -> Result<Vec<Relationship>, Box<dyn std::error::Error>> {
-        let query = if source.contains("::") {
-            format!(
-                r#"?[source_qualified, target_qualified, rel_type, metadata] := *relationships[source_qualified, target_qualified, rel_type, metadata], source_qualified = "{}""#,
-                source
-            )
-        } else {
-            format!(
-                r#"?[source_qualified, target_qualified, rel_type, metadata] := *relationships[source_qualified, target_qualified, rel_type, metadata], source_qualified = "{}""#,
-                source
-            )
-        };
+        let escaped = escape_datalog(source);
+        let query = format!(
+            r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata], source_qualified = "{}""#,
+            escaped
+        );
 
         let result = self.db.run_script(&query, std::collections::BTreeMap::new())?;
         let rows = result.rows;
@@ -162,12 +156,13 @@ impl GraphEngine {
         let relationships: Vec<Relationship> = rows
             .iter()
             .map(|row| {
-                let metadata_str = row[3].as_str().unwrap_or("{}");
+                let metadata_str = row[4].as_str().unwrap_or("{}");
                 Relationship {
                     id: None,
                     source_qualified: row[0].as_str().unwrap_or("").to_string(),
                     target_qualified: row[1].as_str().unwrap_or("").to_string(),
                     rel_type: row[2].as_str().unwrap_or("").to_string(),
+                    confidence: row[3].as_f64().unwrap_or(1.0),
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
                 }
             })
@@ -180,9 +175,10 @@ impl GraphEngine {
         &self,
         target: &str,
     ) -> Result<Vec<Relationship>, Box<dyn std::error::Error>> {
+        let escaped = escape_datalog(target);
         let query = format!(
-            r#"?[source_qualified, target_qualified, rel_type, metadata] := *relationships[source_qualified, target_qualified, rel_type, metadata], target_qualified = "{}""#,
-            target
+            r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata], target_qualified = "{}""#,
+            escaped
         );
 
         let result = self.db.run_script(&query, std::collections::BTreeMap::new())?;
@@ -191,12 +187,13 @@ impl GraphEngine {
         let relationships: Vec<Relationship> = rows
             .iter()
             .map(|row| {
-                let metadata_str = row[3].as_str().unwrap_or("{}");
+                let metadata_str = row[4].as_str().unwrap_or("{}");
                 Relationship {
                     id: None,
                     source_qualified: row[0].as_str().unwrap_or("").to_string(),
                     target_qualified: row[1].as_str().unwrap_or("").to_string(),
                     rel_type: row[2].as_str().unwrap_or("").to_string(),
+                    confidence: row[3].as_f64().unwrap_or(1.0),
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
                 }
             })
@@ -253,7 +250,7 @@ impl GraphEngine {
     }
 
     pub fn all_relationships(&self) -> Result<Vec<Relationship>, Box<dyn std::error::Error>> {
-        let query = r#"?[source_qualified, target_qualified, rel_type, metadata] := *relationships[source_qualified, target_qualified, rel_type, metadata]"#;
+        let query = r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata]"#;
 
         let result = self.db.run_script(query, std::collections::BTreeMap::new())?;
         let rows = result.rows;
@@ -261,12 +258,13 @@ impl GraphEngine {
         let relationships: Vec<Relationship> = rows
             .iter()
             .map(|row| {
-                let metadata_str = row[3].as_str().unwrap_or("{}");
+                let metadata_str = row[4].as_str().unwrap_or("{}");
                 Relationship {
                     id: None,
                     source_qualified: row[0].as_str().unwrap_or("").to_string(),
                     target_qualified: row[1].as_str().unwrap_or("").to_string(),
                     rel_type: row[2].as_str().unwrap_or("").to_string(),
+                    confidence: row[3].as_f64().unwrap_or(1.0),
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
                 }
             })
@@ -570,9 +568,10 @@ impl GraphEngine {
         params.insert("sq".to_string(), serde_json::Value::String(relationship.source_qualified.clone()));
         params.insert("tq".to_string(), serde_json::Value::String(relationship.target_qualified.clone()));
         params.insert("rt".to_string(), serde_json::Value::String(relationship.rel_type.clone()));
+        params.insert("cn".to_string(), serde_json::json!(relationship.confidence));
         params.insert("md".to_string(), serde_json::Value::String(metadata_str));
 
-        let query = r#"?[source_qualified, target_qualified, rel_type, metadata] <- [[ $sq, $tq, $rt, $md ]] :put relationships { source_qualified, target_qualified, rel_type, metadata }"#;
+        let query = r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] <- [[ $sq, $tq, $rt, $cn, $md ]] :put relationships { source_qualified, target_qualified, rel_type, confidence, metadata }"#;
 
         self.db.run_script(query, params)?;
 
@@ -587,7 +586,7 @@ impl GraphEngine {
             return Ok(());
         }
 
-        let query = r#"?[source_qualified, target_qualified, rel_type, metadata] <- [[ $sq, $tq, $rt, $md ]] :put relationships { source_qualified, target_qualified, rel_type, metadata }"#;
+        let query = r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] <- [[ $sq, $tq, $rt, $cn, $md ]] :put relationships { source_qualified, target_qualified, rel_type, confidence, metadata }"#;
 
         for rel in relationships {
             let metadata_str = serde_json::to_string(&rel.metadata)?;
@@ -595,6 +594,7 @@ impl GraphEngine {
             params.insert("sq".to_string(), serde_json::Value::String(rel.source_qualified.clone()));
             params.insert("tq".to_string(), serde_json::Value::String(rel.target_qualified.clone()));
             params.insert("rt".to_string(), serde_json::Value::String(rel.rel_type.clone()));
+            params.insert("cn".to_string(), serde_json::json!(rel.confidence));
             params.insert("md".to_string(), serde_json::Value::String(metadata_str));
 
             self.db.run_script(query, params)?;
@@ -804,9 +804,10 @@ impl GraphEngine {
         &self,
         rel_type: &str,
     ) -> Result<Vec<Relationship>, Box<dyn std::error::Error>> {
+        let escaped = escape_datalog(rel_type);
         let query = format!(
-            r#"?[source_qualified, target_qualified, rel_type, metadata] := *relationships[source_qualified, target_qualified, rel_type, metadata], rel_type = "{}""#,
-            rel_type
+            r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata], rel_type = "{}""#,
+            escaped
         );
 
         let result = self.db.run_script(&query, std::collections::BTreeMap::new())?;
@@ -815,12 +816,13 @@ impl GraphEngine {
         let relationships: Vec<Relationship> = rows
             .iter()
             .map(|row| {
-                let metadata_str = row[3].as_str().unwrap_or("{}");
+                let metadata_str = row[4].as_str().unwrap_or("{}");
                 Relationship {
                     id: None,
                     source_qualified: row[0].as_str().unwrap_or("").to_string(),
                     target_qualified: row[1].as_str().unwrap_or("").to_string(),
                     rel_type: row[2].as_str().unwrap_or("").to_string(),
+                    confidence: row[3].as_f64().unwrap_or(1.0),
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
                 }
             })
@@ -1043,12 +1045,14 @@ impl GraphEngine {
                 .and_then(|m| m.get("callee_file_hint").cloned())
                 .and_then(|v| v.as_str().map(String::from));
 
-            if let Some(target_qn) = self.find_function_by_name(&bare_name, callee_file_hint.as_deref())? {
+            let (target_qn, confidence) = self.find_function_by_name_with_confidence(&bare_name, callee_file_hint.as_deref())?;
+            if let Some(target_qn) = target_qn {
                 self.insert_relationship(&Relationship {
                     id: None,
                     source_qualified: source.clone(),
                     target_qualified: target_qn,
                     rel_type: "calls".to_string(),
+                    confidence,
                     metadata: serde_json::json!({}),
                 })?;
                 resolved += 1;
@@ -1060,12 +1064,12 @@ impl GraphEngine {
         Ok(resolved)
     }
 
-    fn find_function_by_name(&self, name: &str, file_hint: Option<&str>) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    fn find_function_by_name_with_confidence(&self, name: &str, file_hint: Option<&str>) -> Result<(Option<String>, f64), Box<dyn std::error::Error>> {
         if let Some(hint) = file_hint {
             let safe_name = escape_datalog(name);
             let safe_hint = escape_datalog(hint);
             let query = format!(r#"
-                ?[qualified_name] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata],
+                ?[qualified_name, file_path] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata],
                   element_type = "function",
                   name = "{}",
                   file_path = "{}"
@@ -1073,8 +1077,24 @@ impl GraphEngine {
             "#, safe_name, safe_hint);
             let result = self.db.run_script(&query, Default::default())?;
             if let Some(row) = result.rows.first() {
-                return Ok(row[0].as_str().map(String::from));
+                let qn = row[0].as_str().map(String::from);
+                let found_file = row[1].as_str().unwrap_or("");
+                let confidence = if found_file == hint { 1.0 } else { 0.9 };
+                return Ok((qn, confidence));
             }
+
+            let query_all = format!(r#"
+                ?[qualified_name, file_path] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata],
+                  element_type = "function",
+                  name = "{}"
+                :limit 1
+            "#, safe_name);
+            let result_all = self.db.run_script(&query_all, Default::default())?;
+            if let Some(row) = result_all.rows.first() {
+                let qn = row[0].as_str().map(String::from);
+                return Ok((qn, 0.7));
+            }
+            return Ok((None, 0.3));
         }
 
         let safe_name = escape_datalog(name);
@@ -1085,14 +1105,14 @@ impl GraphEngine {
             :limit 1
         "#, safe_name);
         let result = self.db.run_script(&query, Default::default())?;
-        Ok(result.rows.first().and_then(|row| row[0].as_str().map(String::from)))
+        Ok((result.rows.first().and_then(|row| row[0].as_str().map(String::from)), 0.7))
     }
 
     fn delete_relationship(&self, source: &str, target: &str) -> Result<(), Box<dyn std::error::Error>> {
         let safe_source = escape_datalog(source);
         let safe_target = escape_datalog(target);
         let query = format!(r#"
-            :rm relationships[source_qualified, target_qualified, rel_type, metadata]
+            :rm relationships[source_qualified, target_qualified, rel_type, confidence, metadata]
             := source_qualified = "{}", target_qualified = "{}"
         "#, safe_source, safe_target);
         self.db.run_script(&query, Default::default())?;

@@ -198,6 +198,7 @@ impl<'a> EntityExtractor<'a> {
                     source_qualified: tested_path,
                     target_qualified: self.file_path.to_string(),
                     rel_type: "tested_by".to_string(),
+                    confidence: 1.0,
                     metadata: serde_json::json!({}),
                 });
             }
@@ -248,6 +249,7 @@ impl<'a> EntityExtractor<'a> {
                         source_qualified: self.file_path.to_string(),
                         target_qualified: source,
                         rel_type: "imports".to_string(),
+                        confidence: 1.0,
                         metadata: serde_json::json!({}),
                     });
                 }
@@ -411,6 +413,7 @@ impl<'a> EntityExtractor<'a> {
                                 type_str
                             ),
                             rel_type: "implements".to_string(),
+                            confidence: 1.0,
                             metadata: serde_json::json!({"embedded": true}),
                         });
                     }
@@ -602,6 +605,7 @@ impl<'a> EntityExtractor<'a> {
                         source_qualified: source,
                         target_qualified: target_qualified.clone(),
                         rel_type: "calls".to_string(),
+                        confidence: 0.3,
                         metadata: serde_json::json!({
                             "bare_name": name,
                             "callee_file_hint": self.file_path,

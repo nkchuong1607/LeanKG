@@ -77,6 +77,7 @@ impl DocIndexer {
                     source_qualified: parent_name,
                     target_qualified: child_name,
                     rel_type: "contains".to_string(),
+                    confidence: 1.0,
                     metadata: serde_json::json!({}),
                 });
             }
@@ -146,6 +147,7 @@ impl DocIndexer {
                 source_qualified: qualified_name.clone(),
                 target_qualified: target,
                 rel_type: "references".to_string(),
+                confidence: 1.0,
                 metadata: serde_json::json!({}),
             });
 
@@ -154,6 +156,7 @@ impl DocIndexer {
                 source_qualified: target_clone,
                 target_qualified: qualified_name.clone(),
                 rel_type: "documented_by".to_string(),
+                confidence: 1.0,
                 metadata: serde_json::json!({}),
             });
         }
@@ -227,6 +230,7 @@ impl DocIndexer {
                         source_qualified: doc_qualified.to_string(),
                         target_qualified: section_qualified,
                         rel_type: "contains".to_string(),
+                        confidence: 1.0,
                         metadata: serde_json::json!({}),
                     });
                 }
@@ -255,6 +259,7 @@ impl DocIndexer {
                 source_qualified: doc_qualified.to_string(),
                 target_qualified: section_qualified,
                 rel_type: "contains".to_string(),
+                confidence: 1.0,
                 metadata: serde_json::json!({}),
             });
         }

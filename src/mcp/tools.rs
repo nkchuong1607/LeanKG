@@ -113,12 +113,13 @@ impl ToolRegistry {
             },
             ToolDefinition {
                 name: "get_impact_radius".to_string(),
-                description: "Get all files affected by change within N hops. Keep depth<=2 for LLM context budgets. Depth 3 may return hundreds of nodes.".to_string(),
+                description: "Get all files affected by change within N hops. Keep depth<=2 for LLM context budgets. Depth 3 may return hundreds of nodes. Results include confidence scores (0.0-1.0) and severity classification (WILL BREAK, LIKELY AFFECTED, MAY BE AFFECTED).".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
                         "file": {"type": "string", "description": "File to analyze"},
-                        "depth": {"type": "integer", "default": 3, "description": "Hop depth (default: 3). Keep <=2 for context budgets."}
+                        "depth": {"type": "integer", "default": 3, "description": "Hop depth (default: 3). Keep <=2 for context budgets."},
+                        "min_confidence": {"type": "number", "default": 0.0, "description": "Minimum confidence threshold (0.0-1.0). Only return results with confidence >= this value."}
                     },
                     "required": ["file"]
                 }),
