@@ -1,24 +1,24 @@
 {
   "overhead": {
     "time_delta": 0.0,
-    "token_delta": -2474,
+    "token_delta": 13754,
     "token_delta_percent": 0.0
   },
   "task": "find-extractor",
   "with_leankg": {
     "build_time_seconds": 0.0,
-    "cached_tokens": 0,
-    "input_tokens": 24038,
+    "cached_tokens": 16320,
+    "input_tokens": 12833,
     "success": true,
     "token_percent": 0.0,
-    "total_tokens": 24371
+    "total_tokens": 29660
   },
   "without_leankg": {
     "build_time_seconds": 0.0,
-    "cached_tokens": 15616,
-    "input_tokens": 10563,
+    "cached_tokens": 0,
+    "input_tokens": 15872,
     "success": true,
     "token_percent": 0.0,
-    "total_tokens": 26845
+    "total_tokens": 15906
   }
 }

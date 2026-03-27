@@ -1,14 +1,14 @@
 # Benchmark Comparison: find-codeelement
 
 ## With LeanKG
-- Total Tokens: 15204
-- Input: 15171
+- Total Tokens: 15916
+- Input: 15870
 - Cached: 0
 
 ## Without LeanKG
-- Total Tokens: 5271
-- Input: 5271
-- Cached: 0
+- Total Tokens: 16381
+- Input: 298
+- Cached: 16000
 
 ## Overhead
-- Token Delta: 9933
+- Token Delta: -465

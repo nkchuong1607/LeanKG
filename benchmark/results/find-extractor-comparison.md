@@ -1,14 +1,14 @@
 # Benchmark Comparison: find-extractor
 
 ## With LeanKG
-- Total Tokens: 24371
-- Input: 24038
-- Cached: 0
+- Total Tokens: 29660
+- Input: 12833
+- Cached: 16320
 
 ## Without LeanKG
-- Total Tokens: 26845
-- Input: 10563
-- Cached: 15616
+- Total Tokens: 15906
+- Input: 15872
+- Cached: 0
 
 ## Overhead
-- Token Delta: -2474
+- Token Delta: 13754

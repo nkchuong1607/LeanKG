@@ -1,24 +1,24 @@
 {
   "overhead": {
     "time_delta": 0.0,
-    "token_delta": 2593,
+    "token_delta": -1859,
     "token_delta_percent": 0.0
   },
   "task": "find-mcp-handler",
   "with_leankg": {
     "build_time_seconds": 0.0,
-    "cached_tokens": 18688,
-    "input_tokens": 670,
+    "cached_tokens": 15872,
+    "input_tokens": 423,
     "success": true,
     "token_percent": 0.0,
-    "total_tokens": 19437
+    "total_tokens": 16458
   },
   "without_leankg": {
     "build_time_seconds": 0.0,
-    "cached_tokens": 2304,
-    "input_tokens": 14492,
+    "cached_tokens": 15872,
+    "input_tokens": 2225,
     "success": true,
     "token_percent": 0.0,
-    "total_tokens": 16844
+    "total_tokens": 18317
   }
 }
