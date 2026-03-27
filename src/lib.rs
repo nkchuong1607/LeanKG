@@ -11,4 +11,3 @@ pub mod indexer;
 pub mod mcp;
 pub mod watcher;
 pub mod benchmark;
-pub mod web;

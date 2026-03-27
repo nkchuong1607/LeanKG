@@ -230,23 +230,10 @@ fn test_cli_generate_with_template() {
 }
 
 #[test]
-fn test_cli_serve_defaults() {
+fn test_cli_serve() {
     let args = TestArgs::try_parse_from(["leankg", "serve"]).unwrap();
     match args.command {
-        CLICommand::Serve { web_port } => {
-            assert_eq!(web_port, 8080);
-        }
-        _ => panic!("expected Serve command"),
-    }
-}
-
-#[test]
-fn test_cli_serve_custom_port() {
-    let args = TestArgs::try_parse_from(["leankg", "serve", "--web-port", "9000"]).unwrap();
-    match args.command {
-        CLICommand::Serve { web_port } => {
-            assert_eq!(web_port, 9000);
-        }
+        CLICommand::Serve => {}
         _ => panic!("expected Serve command"),
     }
 }

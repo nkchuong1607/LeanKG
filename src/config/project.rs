@@ -6,7 +6,6 @@ pub struct ProjectConfig {
     pub project: ProjectSettings,
     pub indexer: IndexerConfig,
     pub mcp: McpConfig,
-    pub web: WebConfig,
     pub documentation: DocConfig,
 }
 
@@ -31,12 +30,6 @@ pub struct McpConfig {
     pub auto_index_on_start: bool,
     pub auto_index_threshold_minutes: u64,
     pub index_on_first_call: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebConfig {
-    pub enabled: bool,
-    pub port: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,10 +61,6 @@ impl Default for ProjectConfig {
                 auto_index_on_start: true,
                 auto_index_threshold_minutes: 5,
                 index_on_first_call: true,
-            },
-            web: WebConfig {
-                enabled: true,
-                port: 8080,
             },
             documentation: DocConfig {
                 output: PathBuf::from("./docs"),
@@ -112,10 +101,8 @@ mod tests {
     }
 
     #[test]
-    fn test_config_web_documentation() {
+    fn test_config_documentation() {
         let config = ProjectConfig::default();
-        assert!(config.web.enabled);
-        assert_eq!(config.web.port, 8080);
         assert_eq!(config.documentation.output, PathBuf::from("./docs"));
         assert_eq!(config.documentation.templates, vec!["agents", "claude"]);
     }

@@ -36,11 +36,8 @@ pub enum CLICommand {
         #[arg(long, short)]
         template: Option<String>,
     },
-    /// Start web UI server
-    Serve {
-        #[arg(long, default_value = "8080")]
-        web_port: u16,
-    },
+    /// Start web UI server (deprecated - use CozoDB standalone)
+    Serve,
     /// Start MCP server with stdio transport (for opencode integration)
     McpStdio {
         /// Enable auto-indexing with file watcher
