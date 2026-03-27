@@ -125,6 +125,18 @@ impl ToolRegistry {
                 }),
             },
             ToolDefinition {
+                name: "detect_changes".to_string(),
+                description: "Pre-commit risk analysis: computes diff between working tree and last indexed commit. Returns changed files, affected symbols, and risk level (critical/high/medium/low). Risk classification: critical>=10 dependents at depth 1, high>=5 dependents or public API changed, medium=2-4 dependents or cross-module dep, low=<=1 dependent within single cluster.".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "scope": {"type": "string", "enum": ["staged", "unstaged", "all"], "default": "all", "description": "Scope of changes to analyze: 'staged' (git staged), 'unstaged', or 'all' (default)"},
+                        "min_confidence": {"type": "number", "default": 0.0, "description": "Minimum confidence threshold for affected symbols."}
+                    },
+                    "required": []
+                }),
+            },
+            ToolDefinition {
                 name: "get_review_context".to_string(),
                 description: "Generate focused subgraph + structured review prompt".to_string(),
                 input_schema: json!({

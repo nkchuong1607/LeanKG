@@ -78,9 +78,11 @@ mod tool_registry_tests {
             let has_exclude = props.get("exclude").is_some();
             let has_mcp_config_path = props.get("mcp_config_path").is_some();
             let has_depth = props.get("depth").is_some();
+            let has_scope = props.get("scope").is_some();
+            let has_min_confidence = props.get("min_confidence").is_some();
 
             assert!(
-                is_empty || has_file || has_files || has_query || has_pattern || has_name || has_function || has_min_lines || has_doc || has_element || has_requirement_id || has_path || has_incremental || has_lang || has_exclude || has_mcp_config_path || has_depth,
+                is_empty || has_file || has_files || has_query || has_pattern || has_name || has_function || has_min_lines || has_doc || has_element || has_requirement_id || has_path || has_incremental || has_lang || has_exclude || has_mcp_config_path || has_depth || has_scope || has_min_confidence,
                 "Tool {} should have at least one parameter or empty properties",
                 tool.name
             );

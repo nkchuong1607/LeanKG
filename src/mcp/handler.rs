@@ -120,6 +120,7 @@ impl ToolHandler {
             "mcp_install" => self.mcp_install(arguments),
             "mcp_status" => self.mcp_status(arguments),
             "mcp_impact" => self.mcp_impact(arguments),
+            "detect_changes" => self.detect_changes(arguments),
             "query_file" => self.query_file(arguments),
             "get_dependencies" => self.get_dependencies(arguments),
             "get_dependents" => self.get_dependents(arguments),
@@ -349,6 +350,140 @@ impl ToolHandler {
                 "type": e.element_type,
                 "file": e.file_path
             })).collect::<Vec<_>>()
+        }))
+    }
+
+    fn detect_changes(&self, args: &Value) -> Result<Value, String> {
+        let scope = args["scope"].as_str().unwrap_or("all");
+        let min_confidence = args["min_confidence"].as_f64().unwrap_or(0.0);
+
+        let changed_files = match scope {
+            "staged" => crate::indexer::GitAnalyzer::get_staged_files()
+                .unwrap_or_else(|_| Vec::new()),
+            "unstaged" => {
+                let changed = crate::indexer::GitAnalyzer::get_changed_files_since_last_commit()
+                    .unwrap_or_else(|_| crate::indexer::GitChangedFiles {
+                        modified: Vec::new(),
+                        added: Vec::new(),
+                        deleted: Vec::new(),
+                    });
+                let mut files = changed.modified;
+                files.extend(changed.added);
+                files.extend(changed.deleted);
+                files
+            }
+            _ => {
+                let changed = crate::indexer::GitAnalyzer::get_changed_files_since_last_commit()
+                    .unwrap_or_else(|_| crate::indexer::GitChangedFiles {
+                        modified: Vec::new(),
+                        added: Vec::new(),
+                        deleted: Vec::new(),
+                    });
+                let mut files = changed.modified;
+                files.extend(changed.added);
+                files.extend(changed.deleted);
+                files.extend(
+                    crate::indexer::GitAnalyzer::get_untracked_files()
+                        .unwrap_or_else(|_| Vec::new())
+                );
+                files
+            }
+        };
+
+        let mut changed_symbols = Vec::new();
+        let mut affected_symbols = Vec::new();
+        let mut risk_reasons = Vec::new();
+        let mut max_dependents_at_depth1 = 0;
+        let mut has_public_api_change = false;
+
+        let all_elements = self.graph_engine.all_elements().map_err(|e| e.to_string())?;
+        let all_relationships = self.graph_engine.all_relationships().map_err(|e| e.to_string())?;
+
+        for file in &changed_files {
+            let file_elements: Vec<_> = all_elements
+                .iter()
+                .filter(|e| &e.file_path == file)
+                .collect();
+
+            for elem in file_elements {
+                changed_symbols.push(json!({
+                    "qualified_name": elem.qualified_name,
+                    "name": elem.name,
+                    "type": elem.element_type,
+                    "file": elem.file_path
+                }));
+
+                let dependents: Vec<_> = all_relationships
+                    .iter()
+                    .filter(|r| r.target_qualified == elem.qualified_name && r.rel_type == "calls")
+                    .collect();
+
+                let depth1_count = dependents.len();
+                max_dependents_at_depth1 = max_dependents_at_depth1.max(depth1_count);
+
+                if depth1_count >= 10 {
+                    risk_reasons.push(format!("{} has {} direct callers (>=10)", elem.name, depth1_count));
+                } else if depth1_count >= 5 {
+                    risk_reasons.push(format!("{} has {} direct callers (>=5)", elem.name, depth1_count));
+                }
+
+                if elem.element_type == "function" && (elem.name.starts_with("pub_") || elem.name.starts_with("export_") || elem.name == "main") {
+                    has_public_api_change = true;
+                    risk_reasons.push(format!("Public API change detected: {}", elem.name));
+                }
+            }
+        }
+
+        let min_confidence_filter = if min_confidence > 0.0 { min_confidence } else { 0.0 };
+
+        for file in &changed_files {
+            let dependents = crate::indexer::find_dependents(file, &all_relationships
+                .iter()
+                .map(|r| (r.source_qualified.clone(), r.target_qualified.clone()))
+                .collect::<Vec<_>>());
+
+            for dep_file in dependents {
+                if let Ok(Some(elem)) = self.graph_engine.find_element(&dep_file) {
+                    let rels: Vec<_> = all_relationships
+                        .iter()
+                        .filter(|r| r.target_qualified == elem.qualified_name && r.rel_type == "calls")
+                        .filter(|r| r.confidence >= min_confidence_filter)
+                        .collect();
+
+                    if !rels.is_empty() {
+                        affected_symbols.push(json!({
+                            "qualified_name": elem.qualified_name,
+                            "name": elem.name,
+                            "type": elem.element_type,
+                            "file": elem.file_path,
+                            "confidence": rels.first().map(|r| r.confidence).unwrap_or(1.0)
+                        }));
+                    }
+                }
+            }
+        }
+
+        let risk_level = if max_dependents_at_depth1 >= 10 || (has_public_api_change && max_dependents_at_depth1 >= 5) {
+            "critical"
+        } else if max_dependents_at_depth1 >= 5 || has_public_api_change {
+            "high"
+        } else if max_dependents_at_depth1 >= 2 || affected_symbols.len() > 5 {
+            "medium"
+        } else {
+            "low"
+        };
+
+        Ok(json!({
+            "summary": {
+                "changed_files": changed_files.len(),
+                "changed_symbols": changed_symbols.len(),
+                "affected_symbols": affected_symbols.len(),
+                "risk_level": risk_level
+            },
+            "changed_files": changed_files,
+            "changed_symbols": changed_symbols,
+            "affected_symbols": affected_symbols,
+            "risk_reasons": risk_reasons
         }))
     }
 
