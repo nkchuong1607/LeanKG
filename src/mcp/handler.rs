@@ -142,6 +142,8 @@ impl ToolHandler {
             "get_code_tree" => self.get_code_tree(arguments),
             "find_related_docs" => self.find_related_docs(arguments),
             "mcp_hello" => self.mcp_hello(arguments),
+            "get_clusters" => self.get_clusters(arguments),
+            "get_cluster_context" => self.get_cluster_context(arguments),
             _ => Err(format!("Unknown tool: {}", tool_name)),
         }
     }
@@ -676,7 +678,9 @@ impl ToolHandler {
                         "line": elem.line_start,
                         "signature": signature,
                         "priority": priority_str,
-                        "token_count": ctx_elem.token_count
+                        "token_count": ctx_elem.token_count,
+                        "cluster_id": elem.cluster_id,
+                        "cluster_label": elem.cluster_label
                     })
                 } else {
                     json!({
@@ -687,14 +691,35 @@ impl ToolHandler {
                         "line_start": elem.line_start,
                         "line_end": elem.line_end,
                         "priority": priority_str,
-                        "token_count": ctx_elem.token_count
+                        "token_count": ctx_elem.token_count,
+                        "cluster_id": elem.cluster_id,
+                        "cluster_label": elem.cluster_label
                     })
                 }
             })
             .collect();
 
+        let file_element = self.graph_engine.find_element(file).map_err(|e| e.to_string())?;
+        let cluster_info = file_element.as_ref().map(|elem| {
+            json!({
+                "id": elem.cluster_id,
+                "label": elem.cluster_label
+            })
+        });
+
+        let dependents_count = file_element.as_ref().map(|elem| {
+            self.graph_engine.get_dependents(elem.qualified_name.as_str()).map(|d| d.len()).unwrap_or(0)
+        }).unwrap_or(0);
+        
+        let dependencies_count = file_element.as_ref().map(|elem| {
+            self.graph_engine.get_dependencies(elem.qualified_name.as_str()).map(|d| d.len()).unwrap_or(0)
+        }).unwrap_or(0);
+
         Ok(json!({
             "file": file,
+            "cluster": cluster_info,
+            "dependents_count": dependents_count,
+            "dependencies_count": dependencies_count,
             "elements": elements_json,
             "total_tokens": result.total_tokens,
             "max_tokens": result.max_tokens,
@@ -773,7 +798,9 @@ impl ToolHandler {
                     "name": e.name,
                     "type": e.element_type,
                     "file": e.file_path,
-                    "line": e.line_start
+                    "line": e.line_start,
+                    "cluster_id": e.cluster_id,
+                    "cluster_label": e.cluster_label
                 })
             })
             .collect();
@@ -1126,6 +1153,96 @@ impl ToolHandler {
 
         Ok(json!({ "related_docs": related }))
     }
+
+    fn get_clusters(&self, _args: &Value) -> Result<Value, String> {
+        use crate::graph::clustering::{Cluster, CommunityDetector, get_cluster_stats};
+        
+        let detector = CommunityDetector::new(self.graph_engine.db());
+        let clusters = detector.detect_communities().map_err(|e| e.to_string())?;
+        
+        let cluster_list: Vec<Cluster> = clusters.values().cloned().collect();
+        let stats = get_cluster_stats(&clusters);
+        
+        Ok(json!({
+            "clusters": cluster_list,
+            "stats": {
+                "total_clusters": stats.total_clusters,
+                "total_members": stats.total_members,
+                "avg_cluster_size": stats.avg_cluster_size
+            }
+        }))
+    }
+
+    fn get_cluster_context(&self, args: &Value) -> Result<Value, String> {
+        use crate::graph::clustering::CommunityDetector;
+        
+        let cluster_id = args["cluster_id"].as_str();
+        let cluster_label = args["cluster_label"].as_str();
+        
+        let detector = CommunityDetector::new(self.graph_engine.db());
+        let clusters = detector.detect_communities().map_err(|e| e.to_string())?;
+        
+        let target_cluster = if let Some(cid) = cluster_id {
+            clusters.get(cid).cloned()
+        } else if let Some(label) = cluster_label {
+            clusters.values().find(|c| c.label == label).cloned()
+        } else {
+            None
+        };
+        
+        match target_cluster {
+            Some(cluster) => {
+                let elements = self.graph_engine.all_elements().map_err(|e| e.to_string())?;
+                let relationships = self.graph_engine.all_relationships().map_err(|e| e.to_string())?;
+                
+                let cluster_elements: Vec<_> = elements
+                    .iter()
+                    .filter(|e| cluster.members.contains(&e.qualified_name))
+                    .map(|e| json!({
+                        "qualified_name": e.qualified_name,
+                        "element_type": e.element_type,
+                        "name": e.name,
+                        "file_path": e.file_path
+                    }))
+                    .collect();
+                
+                let member_set: std::collections::HashSet<_> = cluster.members.iter().collect();
+                let inter_cluster: Vec<_> = relationships
+                    .iter()
+                    .filter(|r| {
+                        let src_in_cluster = member_set.contains(&r.source_qualified);
+                        let tgt_in_cluster = member_set.contains(&r.target_qualified);
+                        src_in_cluster != tgt_in_cluster
+                    })
+                    .map(|r| json!({
+                        "source": r.source_qualified,
+                        "target": r.target_qualified,
+                        "type": r.rel_type
+                    }))
+                    .collect();
+                
+                let entry_points: Vec<_> = cluster_elements
+                    .iter()
+                    .filter(|e| {
+                        relationships.iter().any(|r| {
+                            r.target_qualified == e["qualified_name"] && !member_set.contains(&r.source_qualified)
+                        })
+                    })
+                    .collect();
+                
+                Ok(json!({
+                    "cluster_id": cluster.id,
+                    "cluster_label": cluster.label,
+                    "members": cluster_elements,
+                    "member_count": cluster.members.len(),
+                    "representative_files": cluster.representative_files,
+                    "entry_points": entry_points,
+                    "inter_cluster_dependencies": inter_cluster
+                }))
+            }
+            None => Err("Cluster not found".to_string())
+        }
+    }
 }
 
 fn generate_review_prompt(elements: &[CodeElement], _relationships: &[Relationship]) -> String {
@@ -1229,6 +1346,7 @@ mod tests {
             language: "rust".to_string(),
             parent_qualified: None,
             metadata: json!({}),
+            ..Default::default()
         }];
         let prompt = generate_review_prompt(&elements, &[]);
         assert!(prompt.contains("main"));
@@ -1247,6 +1365,7 @@ mod tests {
             language: "rust".to_string(),
             parent_qualified: None,
             metadata: json!({}),
+            ..Default::default()
         }];
         let doc = generate_documentation("src/main.rs", &elements);
         assert!(doc.contains("src/main.rs"));

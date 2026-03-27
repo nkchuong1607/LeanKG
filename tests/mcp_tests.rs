@@ -80,9 +80,11 @@ mod tool_registry_tests {
             let has_depth = props.get("depth").is_some();
             let has_scope = props.get("scope").is_some();
             let has_min_confidence = props.get("min_confidence").is_some();
+            let has_cluster_id = props.get("cluster_id").is_some();
+            let has_cluster_label = props.get("cluster_label").is_some();
 
             assert!(
-                is_empty || has_file || has_files || has_query || has_pattern || has_name || has_function || has_min_lines || has_doc || has_element || has_requirement_id || has_path || has_incremental || has_lang || has_exclude || has_mcp_config_path || has_depth || has_scope || has_min_confidence,
+                is_empty || has_file || has_files || has_query || has_pattern || has_name || has_function || has_min_lines || has_doc || has_element || has_requirement_id || has_path || has_incremental || has_lang || has_exclude || has_mcp_config_path || has_depth || has_scope || has_min_confidence || has_cluster_id || has_cluster_label,
                 "Tool {} should have at least one parameter or empty properties",
                 tool.name
             );

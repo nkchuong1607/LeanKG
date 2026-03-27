@@ -133,6 +133,7 @@ impl DocIndexer {
                 "title": title,
                 "headings": headings,
             }),
+            ..Default::default()
         };
 
         let (sections, heading_rels) = self.extract_sections(&content, &qualified_name, path);
@@ -223,6 +224,7 @@ impl DocIndexer {
                         language: "markdown".to_string(),
                         parent_qualified: Some(doc_qualified.to_string()),
                         metadata: serde_json::json!({}),
+                        ..Default::default()
                     });
 
                     relationships.push(Relationship {
@@ -252,6 +254,7 @@ impl DocIndexer {
                 language: "markdown".to_string(),
                 parent_qualified: Some(doc_qualified.to_string()),
                 metadata: serde_json::json!({}),
+                ..Default::default()
             });
 
             relationships.push(Relationship {

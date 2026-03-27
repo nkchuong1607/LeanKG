@@ -29,7 +29,7 @@ fn init_schema(db: &CozoDb) -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     if !existing_relations.contains("code_elements") {
-        let create_code_elements = r#":create code_elements {qualified_name: String, element_type: String, name: String, file_path: String, line_start: Int, line_end: Int, language: String, parent_qualified: String?, metadata: String}"#;
+        let create_code_elements = r#":create code_elements {qualified_name: String, element_type: String, name: String, file_path: String, line_start: Int, line_end: Int, language: String, parent_qualified: String?, cluster_id: String?, cluster_label: String?, metadata: String}"#;
         if let Err(e) = db.run_script(create_code_elements, Default::default()) {
             eprintln!("Failed to create code_elements: {:?}", e);
         }

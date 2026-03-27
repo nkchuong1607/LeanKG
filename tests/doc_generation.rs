@@ -78,6 +78,7 @@ async fn test_doc_tracking_info_structure() {
         language: "rust".to_string(),
         parent_qualified: None,
         metadata: serde_json::json!({}),
+        ..Default::default()
     };
 
     let relationship = Relationship {
@@ -176,6 +177,7 @@ async fn test_doc_generator_with_elements() {
         language: "rust".to_string(),
         parent_qualified: None,
         metadata: serde_json::json!({}),
+        ..Default::default()
     };
 
     graph.insert_elements(&[element]).unwrap();
@@ -207,6 +209,7 @@ async fn test_doc_generator_regenerate_for_file() {
         language: "rust".to_string(),
         parent_qualified: None,
         metadata: serde_json::json!({}),
+        ..Default::default()
     };
 
     graph.insert_elements(&[element]).unwrap();
@@ -235,6 +238,7 @@ async fn test_doc_generator_tracking_info() {
         language: "rust".to_string(),
         parent_qualified: None,
         metadata: serde_json::json!({}),
+        ..Default::default()
     };
 
     graph.insert_elements(&[element]).unwrap();

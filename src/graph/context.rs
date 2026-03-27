@@ -224,6 +224,7 @@ mod tests {
             language: "rust".to_string(),
             parent_qualified: None,
             metadata: serde_json::json!({}),
+            ..Default::default()
         };
 
         let tokens = ContextProvider::element_tokens(&elem);
@@ -255,6 +256,7 @@ mod tests {
             language: "rust".to_string(),
             parent_qualified: None,
             metadata: serde_json::json!({}),
+            ..Default::default()
         };
 
         let ctx_elem = ContextElement {
@@ -288,6 +290,7 @@ mod tests {
             language: "rust".to_string(),
             parent_qualified: None,
             metadata: serde_json::json!({}),
+            ..Default::default()
         };
 
         let ctx_elem = ContextElement {

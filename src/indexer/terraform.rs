@@ -41,6 +41,7 @@ impl TerraformExtractor {
             language: "terraform".to_string(),
             parent_qualified: None,
             metadata: serde_json::json!({}),
+            ..Default::default()
         });
 
         if let Some(re) = resource_regex {
@@ -63,6 +64,7 @@ impl TerraformExtractor {
                             "resource_type": resource_type.as_str(),
                             "name": name.as_str(),
                         }),
+                        ..Default::default()
                     });
                 }
             }
@@ -88,6 +90,7 @@ impl TerraformExtractor {
                             "data_type": data_type.as_str(),
                             "name": name.as_str(),
                         }),
+                        ..Default::default()
                     });
                 }
             }
@@ -112,6 +115,7 @@ impl TerraformExtractor {
                         metadata: serde_json::json!({
                             "name": name.as_str(),
                         }),
+                        ..Default::default()
                     });
                 }
             }
@@ -136,6 +140,7 @@ impl TerraformExtractor {
                         metadata: serde_json::json!({
                             "name": name.as_str(),
                         }),
+                        ..Default::default()
                     });
                 }
             }
@@ -160,6 +165,7 @@ impl TerraformExtractor {
                         metadata: serde_json::json!({
                             "name": name.as_str(),
                         }),
+                        ..Default::default()
                     });
                 }
             }
@@ -184,6 +190,7 @@ impl TerraformExtractor {
                         metadata: serde_json::json!({
                             "name": name.as_str(),
                         }),
+                        ..Default::default()
                     });
                 }
             }

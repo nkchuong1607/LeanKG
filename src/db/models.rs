@@ -53,7 +53,7 @@ impl std::fmt::Display for RelationshipType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CodeElement {
     pub qualified_name: String,
     pub element_type: String,
@@ -63,6 +63,11 @@ pub struct CodeElement {
     pub line_end: u32,
     pub language: String,
     pub parent_qualified: Option<String>,
+    #[serde(default)]
+    pub cluster_id: Option<String>,
+    #[serde(default)]
+    pub cluster_label: Option<String>,
+    #[serde(default)]
     pub metadata: serde_json::Value,
 }
 
@@ -155,6 +160,7 @@ mod tests {
             language: "rust".to_string(),
             parent_qualified: None,
             metadata: serde_json::json!({}),
+            ..Default::default()
         };
         assert_eq!(elem.name, "main");
     }

@@ -322,6 +322,27 @@ impl ToolRegistry {
                     "required": []
                 }),
             },
+            ToolDefinition {
+                name: "get_clusters".to_string(),
+                description: "Get all clusters (functional communities) in the codebase. Returns cluster ID, label, member count, and representative files.".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }),
+            },
+            ToolDefinition {
+                name: "get_cluster_context".to_string(),
+                description: "Get all symbols in a cluster with entry points and inter-cluster dependencies.".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "cluster_id": {"type": "string", "description": "Cluster ID to get context for"},
+                        "cluster_label": {"type": "string", "description": "Alternative: cluster label to search for"}
+                    },
+                    "required": []
+                }),
+            },
         ]
     }
 }

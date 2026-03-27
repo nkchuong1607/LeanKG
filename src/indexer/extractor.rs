@@ -306,6 +306,7 @@ impl<'a> EntityExtractor<'a> {
                     "signature": signature,
                     "signature_line_end": sig_end + 1,
                 }),
+                ..Default::default()
             });
         }
     }
@@ -323,6 +324,7 @@ impl<'a> EntityExtractor<'a> {
                 language: self.language.to_string(),
                 parent_qualified: parent.map(String::from),
                 metadata: serde_json::json!({}),
+                ..Default::default()
             });
         }
     }
@@ -349,6 +351,7 @@ impl<'a> EntityExtractor<'a> {
                 language: self.language.to_string(),
                 parent_qualified: parent.map(String::from),
                 metadata: serde_json::json!({}),
+                ..Default::default()
             });
 
             if !is_interface {
@@ -435,6 +438,7 @@ impl<'a> EntityExtractor<'a> {
                 language: self.language.to_string(),
                 parent_qualified: parent.map(String::from),
                 metadata: serde_json::json!({}),
+                ..Default::default()
             });
         }
     }
@@ -457,6 +461,7 @@ impl<'a> EntityExtractor<'a> {
                                 language: self.language.to_string(),
                                 parent_qualified: parent.map(String::from),
                                 metadata: serde_json::json!({}),
+                                ..Default::default()
                             });
                         }
                     }
@@ -476,6 +481,7 @@ impl<'a> EntityExtractor<'a> {
                                 language: self.language.to_string(),
                                 parent_qualified: parent.map(String::from),
                                 metadata: serde_json::json!({}),
+                                ..Default::default()
                             });
                         }
                     }
@@ -497,6 +503,7 @@ impl<'a> EntityExtractor<'a> {
                             language: self.language.to_string(),
                             parent_qualified: parent.map(String::from),
                             metadata: serde_json::json!({}),
+                            ..Default::default()
                         });
                     }
                 }

@@ -52,6 +52,7 @@ impl CicdYamlExtractor {
             metadata: serde_json::json!({
                 "ci_platform": format!("{:?}", platform).to_lowercase(),
             }),
+            ..Default::default()
         });
 
         match platform {
@@ -112,6 +113,7 @@ impl CicdYamlExtractor {
                     language: "yaml".to_string(),
                     parent_qualified: Some(self.file_path.clone()),
                     metadata,
+                    ..Default::default()
                 });
 
                 if let Some(job_obj) = job_details.as_mapping() {
@@ -144,6 +146,7 @@ impl CicdYamlExtractor {
                                 language: "yaml".to_string(),
                                 parent_qualified: Some(qualified_name.clone()),
                                 metadata: step_metadata,
+                                ..Default::default()
                             });
                         }
                     }
@@ -171,6 +174,7 @@ impl CicdYamlExtractor {
                         "name": stage_name,
                         "stage_index": stage_idx,
                     }),
+                    ..Default::default()
                 });
             }
         }
@@ -225,6 +229,7 @@ impl CicdYamlExtractor {
                 language: "yaml".to_string(),
                 parent_qualified: Some(self.file_path.clone()),
                 metadata,
+                ..Default::default()
             });
         }
     }
@@ -253,6 +258,7 @@ impl CicdYamlExtractor {
                         "name": stage_name,
                         "stage_index": stage_idx,
                     }),
+                    ..Default::default()
                 });
 
                 if let Some(jobs) = stage
@@ -281,6 +287,7 @@ impl CicdYamlExtractor {
                             metadata: serde_json::json!({
                                 "name": job_name,
                             }),
+                            ..Default::default()
                         });
 
                         if let Some(steps) = job
@@ -310,6 +317,7 @@ impl CicdYamlExtractor {
                                     metadata: serde_json::json!({
                                         "name": step_name,
                                     }),
+                                    ..Default::default()
                                 });
                             }
                         }
@@ -338,6 +346,7 @@ impl CicdYamlExtractor {
                     metadata: serde_json::json!({
                         "name": job_name,
                     }),
+                    ..Default::default()
                 });
 
                 if let Some(steps) = job.get("steps").and_then(|v| v.as_sequence()) {
@@ -362,6 +371,7 @@ impl CicdYamlExtractor {
                             metadata: serde_json::json!({
                                 "name": step_name,
                             }),
+                            ..Default::default()
                         });
                     }
                 }

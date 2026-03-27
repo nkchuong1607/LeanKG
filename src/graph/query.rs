@@ -38,7 +38,7 @@ impl GraphEngine {
         qualified_name: &str,
     ) -> Result<Option<CodeElement>, Box<dyn std::error::Error>> {
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], qualified_name = "{}""#,
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], qualified_name = "{}""#,
             qualified_name
         );
 
@@ -51,7 +51,9 @@ impl GraphEngine {
 
         let row = &rows[0];
         let parent_qualified = row[7].as_str().map(String::from);
-        let metadata_str = row[8].as_str().unwrap_or("{}");
+        let cluster_id = row[8].as_str().map(String::from);
+        let cluster_label = row[9].as_str().map(String::from);
+        let metadata_str = row[10].as_str().unwrap_or("{}");
         
         Ok(Some(CodeElement {
             qualified_name: row[0].as_str().unwrap_or("").to_string(),
@@ -62,7 +64,10 @@ impl GraphEngine {
             line_end: row[5].as_i64().unwrap_or(0) as u32,
             language: row[6].as_str().unwrap_or("").to_string(),
             parent_qualified,
+            cluster_id,
+            cluster_label,
             metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+            ..Default::default()
         }))
     }
 
@@ -71,7 +76,7 @@ impl GraphEngine {
         name: &str,
     ) -> Result<Option<CodeElement>, Box<dyn std::error::Error>> {
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], name = "{}""#,
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], name = "{}""#,
             name
         );
 
@@ -84,7 +89,9 @@ impl GraphEngine {
 
         let row = &rows[0];
         let parent_qualified = row[7].as_str().map(String::from);
-        let metadata_str = row[8].as_str().unwrap_or("{}");
+        let cluster_id = row[8].as_str().map(String::from);
+        let cluster_label = row[9].as_str().map(String::from);
+        let metadata_str = row[10].as_str().unwrap_or("{}");
         
         Ok(Some(CodeElement {
             qualified_name: row[0].as_str().unwrap_or("").to_string(),
@@ -95,7 +102,10 @@ impl GraphEngine {
             line_end: row[5].as_i64().unwrap_or(0) as u32,
             language: row[6].as_str().unwrap_or("").to_string(),
             parent_qualified,
+            cluster_id,
+            cluster_label,
             metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+            ..Default::default()
         }))
     }
 
@@ -222,7 +232,7 @@ impl GraphEngine {
     }
 
     pub fn all_elements(&self) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
-        let query = r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata]"#;
+        let query = r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata]"#;
 
         let result = self.db.run_script(query, std::collections::BTreeMap::new())?;
         let rows = result.rows;
@@ -231,7 +241,9 @@ impl GraphEngine {
             .iter()
             .map(|row| {
                 let parent_qualified = row[7].as_str().map(String::from);
-                let metadata_str = row[8].as_str().unwrap_or("{}");
+                let cluster_id = row[8].as_str().map(String::from);
+                let cluster_label = row[9].as_str().map(String::from);
+                let metadata_str = row[10].as_str().unwrap_or("{}");
                 CodeElement {
                     qualified_name: row[0].as_str().unwrap_or("").to_string(),
                     element_type: row[1].as_str().unwrap_or("").to_string(),
@@ -241,7 +253,10 @@ impl GraphEngine {
                     line_end: row[5].as_i64().unwrap_or(0) as u32,
                     language: row[6].as_str().unwrap_or("").to_string(),
                     parent_qualified,
+                    cluster_id,
+                    cluster_label,
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+                    ..Default::default()
                 }
             })
             .collect();
@@ -278,7 +293,7 @@ impl GraphEngine {
         parent_qualified: &str,
     ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], parent_qualified = "{}""#,
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], parent_qualified = "{}""#,
             parent_qualified
         );
 
@@ -289,7 +304,9 @@ impl GraphEngine {
             .iter()
             .map(|row| {
                 let parent_qualified = row[7].as_str().map(String::from);
-                let metadata_str = row[8].as_str().unwrap_or("{}");
+                let cluster_id = row[8].as_str().map(String::from);
+                let cluster_label = row[9].as_str().map(String::from);
+                let metadata_str = row[10].as_str().unwrap_or("{}");
                 CodeElement {
                     qualified_name: row[0].as_str().unwrap_or("").to_string(),
                     element_type: row[1].as_str().unwrap_or("").to_string(),
@@ -299,7 +316,10 @@ impl GraphEngine {
                     line_end: row[5].as_i64().unwrap_or(0) as u32,
                     language: row[6].as_str().unwrap_or("").to_string(),
                     parent_qualified,
+                    cluster_id,
+                    cluster_label,
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+                    ..Default::default()
                 }
             })
             .collect();
@@ -489,7 +509,7 @@ impl GraphEngine {
             return Ok(());
         }
 
-        let query = r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] <- [[ $qn, $et, $nm, $fp, $ls, $le, $lg, $pq, $md ]] :put code_elements { qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata }"#;
+        let query = r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] <- [[ $qn, $et, $nm, $fp, $ls, $le, $lg, $pq, $cid, $cl, $md ]] :put code_elements { qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata }"#;
 
         for element in elements {
             let metadata_str = serde_json::to_string(&element.metadata)?;
@@ -504,6 +524,14 @@ impl GraphEngine {
             match &element.parent_qualified {
                 Some(pq) => params.insert("pq".to_string(), serde_json::Value::String(pq.clone())),
                 None => params.insert("pq".to_string(), serde_json::Value::Null),
+            };
+            match &element.cluster_id {
+                Some(cid) => params.insert("cid".to_string(), serde_json::Value::String(cid.clone())),
+                None => params.insert("cid".to_string(), serde_json::Value::Null),
+            };
+            match &element.cluster_label {
+                Some(cl) => params.insert("cl".to_string(), serde_json::Value::String(cl.clone())),
+                None => params.insert("cl".to_string(), serde_json::Value::Null),
             };
             params.insert("md".to_string(), serde_json::Value::String(metadata_str));
 
@@ -541,9 +569,17 @@ impl GraphEngine {
             Some(pq) => params.insert("pq".to_string(), serde_json::Value::String(pq.clone())),
             None => params.insert("pq".to_string(), serde_json::Value::Null),
         };
+        match &element.cluster_id {
+            Some(cid) => params.insert("cid".to_string(), serde_json::Value::String(cid.clone())),
+            None => params.insert("cid".to_string(), serde_json::Value::Null),
+        };
+        match &element.cluster_label {
+            Some(cl) => params.insert("cl".to_string(), serde_json::Value::String(cl.clone())),
+            None => params.insert("cl".to_string(), serde_json::Value::Null),
+        };
         params.insert("md".to_string(), serde_json::Value::String(metadata_str));
 
-        let query = r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] <- [[ $qn, $et, $nm, $fp, $ls, $le, $lg, $pq, $md ]] :put code_elements { qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata }"#;
+        let query = r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] <- [[ $qn, $et, $nm, $fp, $ls, $le, $lg, $pq, $cid, $cl, $md ]] :put code_elements { qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata }"#;
 
         self.db.run_script(query, params)?;
 
@@ -555,6 +591,32 @@ impl GraphEngine {
                 cache.read().await.invalidate_file(&file_path).await;
             });
         });
+
+        Ok(())
+    }
+
+    pub fn update_element_cluster(
+        &self,
+        qualified_name: &str,
+        cluster_id: Option<String>,
+        cluster_label: Option<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut params = std::collections::BTreeMap::new();
+        params.insert("qn".to_string(), serde_json::Value::String(qualified_name.to_string()));
+        if let Some(cid) = cluster_id {
+            params.insert("cid".to_string(), serde_json::Value::String(cid));
+        } else {
+            params.insert("cid".to_string(), serde_json::Value::Null);
+        }
+        if let Some(cl) = cluster_label {
+            params.insert("cl".to_string(), serde_json::Value::String(cl));
+        } else {
+            params.insert("cl".to_string(), serde_json::Value::Null);
+        }
+
+        let query = r#"*code_elements[qualified_name = $qn] := { cluster_id: $cid, cluster_label: $cl }"#;
+
+        self.db.run_script(query, params)?;
 
         Ok(())
     }
@@ -665,7 +727,7 @@ impl GraphEngine {
         file_path: &str,
     ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], file_path = "{}""#,
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], file_path = "{}""#,
             file_path
         );
 
@@ -676,7 +738,9 @@ impl GraphEngine {
             .iter()
             .map(|row| {
                 let parent_qualified = row[7].as_str().map(String::from);
-                let metadata_str = row[8].as_str().unwrap_or("{}");
+                let cluster_id = row[8].as_str().map(String::from);
+                let cluster_label = row[9].as_str().map(String::from);
+                let metadata_str = row[10].as_str().unwrap_or("{}");
                 CodeElement {
                     qualified_name: row[0].as_str().unwrap_or("").to_string(),
                     element_type: row[1].as_str().unwrap_or("").to_string(),
@@ -686,7 +750,10 @@ impl GraphEngine {
                     line_end: row[5].as_i64().unwrap_or(0) as u32,
                     language: row[6].as_str().unwrap_or("").to_string(),
                     parent_qualified,
+                    cluster_id,
+                    cluster_label,
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+                    ..Default::default()
                 }
             })
             .collect();
@@ -701,7 +768,7 @@ impl GraphEngine {
         let pattern = format!("%{}%", name.to_lowercase());
         
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], regex_matches(lowercase(name), "{}")"#,
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], regex_matches(lowercase(name), "{}")"#,
             pattern
         );
 
@@ -712,7 +779,9 @@ impl GraphEngine {
             .iter()
             .map(|row| {
                 let parent_qualified = row[7].as_str().map(String::from);
-                let metadata_str = row[8].as_str().unwrap_or("{}");
+                let cluster_id = row[8].as_str().map(String::from);
+                let cluster_label = row[9].as_str().map(String::from);
+                let metadata_str = row[10].as_str().unwrap_or("{}");
                 CodeElement {
                     qualified_name: row[0].as_str().unwrap_or("").to_string(),
                     element_type: row[1].as_str().unwrap_or("").to_string(),
@@ -722,7 +791,10 @@ impl GraphEngine {
                     line_end: row[5].as_i64().unwrap_or(0) as u32,
                     language: row[6].as_str().unwrap_or("").to_string(),
                     parent_qualified,
+                    cluster_id,
+                    cluster_label,
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+                    ..Default::default()
                 }
             })
             .collect();
@@ -735,7 +807,7 @@ impl GraphEngine {
         element_type: &str,
     ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], element_type = "{}""#,
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], element_type = "{}""#,
             element_type
         );
 
@@ -746,7 +818,9 @@ impl GraphEngine {
             .iter()
             .map(|row| {
                 let parent_qualified = row[7].as_str().map(String::from);
-                let metadata_str = row[8].as_str().unwrap_or("{}");
+                let cluster_id = row[8].as_str().map(String::from);
+                let cluster_label = row[9].as_str().map(String::from);
+                let metadata_str = row[10].as_str().unwrap_or("{}");
                 CodeElement {
                     qualified_name: row[0].as_str().unwrap_or("").to_string(),
                     element_type: row[1].as_str().unwrap_or("").to_string(),
@@ -756,7 +830,10 @@ impl GraphEngine {
                     line_end: row[5].as_i64().unwrap_or(0) as u32,
                     language: row[6].as_str().unwrap_or("").to_string(),
                     parent_qualified,
+                    cluster_id,
+                    cluster_label,
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+                    ..Default::default()
                 }
             })
             .collect();
@@ -771,7 +848,7 @@ impl GraphEngine {
         let like_pattern = format!("%{}%", pattern);
         
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], regex_matches(lowercase(qualified_name), "{}")"#,
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], regex_matches(lowercase(qualified_name), "{}")"#,
             like_pattern
         );
 
@@ -782,7 +859,9 @@ impl GraphEngine {
             .iter()
             .map(|row| {
                 let parent_qualified = row[7].as_str().map(String::from);
-                let metadata_str = row[8].as_str().unwrap_or("{}");
+                let cluster_id = row[8].as_str().map(String::from);
+                let cluster_label = row[9].as_str().map(String::from);
+                let metadata_str = row[10].as_str().unwrap_or("{}");
                 CodeElement {
                     qualified_name: row[0].as_str().unwrap_or("").to_string(),
                     element_type: row[1].as_str().unwrap_or("").to_string(),
@@ -792,7 +871,10 @@ impl GraphEngine {
                     line_end: row[5].as_i64().unwrap_or(0) as u32,
                     language: row[6].as_str().unwrap_or("").to_string(),
                     parent_qualified,
+                    cluster_id,
+                    cluster_label,
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+                    ..Default::default()
                 }
             })
             .collect();
@@ -836,7 +918,7 @@ impl GraphEngine {
         min_lines: u32,
     ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], element_type = "function", (line_end - line_start + 1) >= {}"#,
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], element_type = "function", (line_end - line_start + 1) >= {}"#,
             min_lines
         );
 
@@ -847,7 +929,9 @@ impl GraphEngine {
             .iter()
             .map(|row| {
                 let parent_qualified = row[7].as_str().map(String::from);
-                let metadata_str = row[8].as_str().unwrap_or("{}");
+                let cluster_id = row[8].as_str().map(String::from);
+                let cluster_label = row[9].as_str().map(String::from);
+                let metadata_str = row[10].as_str().unwrap_or("{}");
                 CodeElement {
                     qualified_name: row[0].as_str().unwrap_or("").to_string(),
                     element_type: row[1].as_str().unwrap_or("").to_string(),
@@ -857,7 +941,10 @@ impl GraphEngine {
                     line_end: row[5].as_i64().unwrap_or(0) as u32,
                     language: row[6].as_str().unwrap_or("").to_string(),
                     parent_qualified,
+                    cluster_id,
+                    cluster_label,
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+                    ..Default::default()
                 }
             })
             .collect();
@@ -877,7 +964,7 @@ impl GraphEngine {
         language: &str,
     ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata], element_type = "function", language = "{}", (line_end - line_start + 1) >= {}"#,
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], element_type = "function", language = "{}", (line_end - line_start + 1) >= {}"#,
             language,
             min_lines
         );
@@ -889,7 +976,9 @@ impl GraphEngine {
             .iter()
             .map(|row| {
                 let parent_qualified = row[7].as_str().map(String::from);
-                let metadata_str = row[8].as_str().unwrap_or("{}");
+                let cluster_id = row[8].as_str().map(String::from);
+                let cluster_label = row[9].as_str().map(String::from);
+                let metadata_str = row[10].as_str().unwrap_or("{}");
                 CodeElement {
                     qualified_name: row[0].as_str().unwrap_or("").to_string(),
                     element_type: row[1].as_str().unwrap_or("").to_string(),
@@ -899,7 +988,10 @@ impl GraphEngine {
                     line_end: row[5].as_i64().unwrap_or(0) as u32,
                     language: row[6].as_str().unwrap_or("").to_string(),
                     parent_qualified,
+                    cluster_id,
+                    cluster_label,
                     metadata: serde_json::from_str(metadata_str).unwrap_or(serde_json::json!({})),
+                    ..Default::default()
                 }
             })
             .collect();
@@ -920,7 +1012,9 @@ impl GraphEngine {
         let result = self.db.run_script(query, Default::default())?;
         Ok(result.rows.iter().map(|row| {
             let parent_qualified = row[7].as_str().map(String::from);
-            let metadata_str = row[8].as_str().unwrap_or("{}");
+            let cluster_id = row[8].as_str().map(String::from);
+            let cluster_label = row[9].as_str().map(String::from);
+            let metadata_str = row[10].as_str().unwrap_or("{}");
             CodeElement {
                 qualified_name: row[0].as_str().unwrap_or("").to_string(),
                 element_type: row[1].as_str().unwrap_or("").to_string(),
@@ -930,8 +1024,11 @@ impl GraphEngine {
                 line_end: row[5].as_i64().unwrap_or(0) as u32,
                 language: row[6].as_str().unwrap_or("").to_string(),
                 parent_qualified,
+                cluster_id,
+                cluster_label,
                 metadata: serde_json::from_str(metadata_str)
                     .unwrap_or(serde_json::json!({})),
+                ..Default::default()
             }
         }).collect())
     }
@@ -948,8 +1045,8 @@ impl GraphEngine {
             None => String::new(),
         };
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata]
-               := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata]{type_clause},
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata]
+               := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata]{type_clause},
               regex_matches(lowercase(name), "{pattern}")
            :limit {limit}"#,
             type_clause = type_clause,
@@ -970,8 +1067,8 @@ impl GraphEngine {
             None => String::new(),
         };
         let query = format!(
-            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata]
-               := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata]{type_clause},
+            r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata]
+               := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata]{type_clause},
               name = "{name}"
            :limit 20"#,
             type_clause = type_clause,
@@ -1069,7 +1166,7 @@ impl GraphEngine {
             let safe_name = escape_datalog(name);
             let safe_hint = escape_datalog(hint);
             let query = format!(r#"
-                ?[qualified_name, file_path] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata],
+                ?[qualified_name, file_path] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata],
                   element_type = "function",
                   name = "{}",
                   file_path = "{}"
@@ -1084,7 +1181,7 @@ impl GraphEngine {
             }
 
             let query_all = format!(r#"
-                ?[qualified_name, file_path] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata],
+                ?[qualified_name, file_path] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata],
                   element_type = "function",
                   name = "{}"
                 :limit 1
@@ -1099,7 +1196,7 @@ impl GraphEngine {
 
         let safe_name = escape_datalog(name);
         let query = format!(r#"
-            ?[qualified_name] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, metadata],
+            ?[qualified_name] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata],
               element_type = "function",
               name = "{}"
             :limit 1
