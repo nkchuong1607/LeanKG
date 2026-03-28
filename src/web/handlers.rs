@@ -224,6 +224,16 @@ pub async fn graph() -> axum::response::Html<String> {
                 <button class="filter-btn" data-filter="function" onclick="setFilter('function')">Function</button>
             </div>
             <div id="graph-container"><div class="loading">Loading graph data...</div></div>
+            <div id="node-tooltip" style="position: fixed;">
+                <div class="tooltip-header">
+                    <span class="tooltip-name" id="tooltip-name"></span>
+                    <span class="tooltip-type" id="tooltip-type"></span>
+                </div>
+                <div class="tooltip-related" id="tooltip-related" style="display: none;">
+                    <div class="tooltip-related-title">Related Nodes</div>
+                    <ul class="tooltip-related-list" id="tooltip-related-list"></ul>
+                </div>
+            </div>
         </div>
         <div class="card">
             <h3>Graph Controls</h3>
@@ -247,6 +257,83 @@ pub async fn graph() -> axum::response::Html<String> {
             .filter-btn.active { background: #0066cc; color: #fff; }
             #graph-container { width: 100%; height: 600px; }
             #graph-container canvas { width: 100% !important; height: 100% !important; }
+            #node-tooltip {
+                position: fixed;
+                background: #fff;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 12px 16px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 1000;
+                max-width: 300px;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.15s ease-in;
+                visibility: hidden;
+            }
+            #node-tooltip.visible {
+                opacity: 1;
+                visibility: visible;
+            }
+            #node-tooltip .tooltip-header {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 8px;
+            }
+            #node-tooltip .tooltip-name {
+                font-weight: 600;
+                font-size: 14px;
+                color: #333;
+                word-break: break-word;
+            }
+            #node-tooltip .tooltip-type {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 500;
+            }
+            .tooltip-type-function { background: #e3f2fd; color: #1565c0; }
+            .tooltip-type-class { background: #f3e5f5; color: #7b1fa2; }
+            .tooltip-type-file { background: #e8f5e9; color: #2e7d32; }
+            .tooltip-type-module { background: #fff3e0; color: #e65100; }
+            .tooltip-type-document { background: #fff3e0; color: #e65100; }
+            .tooltip-type-struct { background: #e3f2fd; color: #1565c0; }
+            .tooltip-type-default { background: #f5f5f5; color: #666; }
+            #node-tooltip .tooltip-related {
+                border-top: 1px solid #eee;
+                padding-top: 8px;
+                margin-top: 4px;
+            }
+            #node-tooltip .tooltip-related-title {
+                font-size: 11px;
+                color: #888;
+                margin-bottom: 4px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            #node-tooltip .tooltip-related-list {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+            }
+            #node-tooltip .tooltip-related-list li {
+                font-size: 12px;
+                color: #555;
+                padding: 2px 0;
+                display: flex;
+                align-items: flex-start;
+                gap: 4px;
+            }
+            #node-tooltip .tooltip-related-list .rel-arrow {
+                color: #888;
+                flex-shrink: 0;
+            }
+            #node-tooltip .tooltip-related-list .rel-type {
+                color: #999;
+                font-size: 11px;
+            }
         </style>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/graphology/0.25.4/graphology.umd.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js"></script>
@@ -259,6 +346,12 @@ pub async fn graph() -> axum::response::Html<String> {
             const docTypes = ['document', 'doc_section'];
             const funcTypes = ['function', 'class', 'struct'];
             const nodePositionCache = {};
+            let mouseX = 0, mouseY = 0;
+            
+            document.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
             
             function isTestElement(node) {
                 const qn = node.id.toLowerCase();
@@ -549,6 +642,17 @@ pub async fn graph() -> axum::response::Html<String> {
                 const NODE_FADE_COLOR = '#ccc';
                 const EDGE_FADE_COLOR = 'rgba(200,200,200,0.3)';
                 
+                const tooltip = document.getElementById('node-tooltip');
+                const tooltipName = document.getElementById('tooltip-name');
+                const tooltipType = document.getElementById('tooltip-type');
+                const tooltipRelated = document.getElementById('tooltip-related');
+                const tooltipRelatedList = document.getElementById('tooltip-related-list');
+                
+                if (!tooltip || !tooltipName || !tooltipType) {
+                    console.error('Tooltip elements not found');
+                    return;
+                }
+                
                 sig = new Sigma(graph, container, {
                     renderLabels: true,
                     labelFont: 'Arial',
@@ -595,11 +699,72 @@ pub async fn graph() -> axum::response::Html<String> {
                 sig.on('enterNode', ({ node }) => {
                     hoveredNode = node;
                     sig.refresh();
+                    
+                    if (!graph || !tooltip || !tooltipName || !tooltipType) return;
+                    
+                    const attrs = graph.getNodeAttributes(node);
+                    const nodeLabel = (attrs && attrs.label) ? String(attrs.label) : String(node);
+                    const nodeType = (attrs && attrs.elementType) ? String(attrs.elementType) : 'unknown';
+                    
+                    tooltipName.textContent = nodeLabel;
+                    tooltipType.textContent = nodeType;
+                    tooltipType.className = 'tooltip-type tooltip-type-' + nodeType.toLowerCase();
+                    
+                    const edges = graph.edges();
+                    const connectedEdges = edges.filter(eid => {
+                        const [src, tgt] = graph.extremities(eid);
+                        return src === node || tgt === node;
+                    });
+                    
+                    if (tooltipRelatedList) tooltipRelatedList.innerHTML = '';
+                    if (connectedEdges.length > 0) {
+                        if (tooltipRelated) tooltipRelated.style.display = 'block';
+                        connectedEdges.slice(0, 5).forEach(eid => {
+                            const [src, tgt] = graph.extremities(eid);
+                            const other = src === node ? tgt : src;
+                            const otherAttrs = graph.getNodeAttributes(other);
+                            const otherLabel = (otherAttrs && otherAttrs.label) ? String(otherAttrs.label) : String(other);
+                            const relType = graph.getEdgeAttribute(eid, 'relType') || 'related';
+                            const direction = src === node ? '->' : '<-';
+                            
+                            if (tooltipRelatedList) {
+                                const li = document.createElement('li');
+                                li.innerHTML = '<span class="rel-arrow">' + direction + '</span><span>' + otherLabel + '</span> <span class="rel-type">(' + relType + ')</span>';
+                                tooltipRelatedList.appendChild(li);
+                            }
+                        });
+                    } else {
+                        if (tooltipRelated) tooltipRelated.style.display = 'none';
+                    }
+                    
+                    const container = document.getElementById('graph-container');
+                    if (!container) return;
+                    const containerRect = container.getBoundingClientRect();
+                    let tooltipX = mouseX + 15;
+                    let tooltipY = mouseY + 15;
+                    
+                    const viewWidth = window.innerWidth;
+                    const viewHeight = window.innerHeight;
+                    
+                    if (tooltipX + 300 > viewWidth) {
+                        tooltipX = mouseX - 315;
+                    }
+                    if (tooltipY + 200 > viewHeight) {
+                        tooltipY = mouseY - 200;
+                    }
+                    
+                    if (tooltipX < 0) tooltipX = 15;
+                    if (tooltipY < 0) tooltipY = 15;
+                    
+                    tooltip.style.left = tooltipX + 'px';
+                    tooltip.style.top = tooltipY + 'px';
+                    tooltip.classList.add('visible');
                 });
                 
                 sig.on('leaveNode', () => {
                     hoveredNode = null;
                     sig.refresh();
+                    if (tooltip) tooltip.classList.remove('visible');
                 });
                 
                 sig.on('clickNode', function(e) {
