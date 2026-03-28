@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::db::models::{BusinessLogic, CodeElement, Relationship, DocLink, TraceabilityEntry, TraceabilityReport};
 use crate::db::schema::CozoDb;
 use crate::graph::cache::QueryCache;
@@ -766,7 +767,7 @@ impl GraphEngine {
         &self,
         name: &str,
     ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
-        let pattern = format!("%{}%", name.to_lowercase());
+        let pattern = format!(".*{}.*", name.to_lowercase());
         
         let query = format!(
             r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], regex_matches(lowercase(name), "{}")"#,
@@ -1124,24 +1125,25 @@ impl GraphEngine {
     }
 
     pub fn resolve_call_edges(&self) -> Result<usize, Box<dyn std::error::Error>> {
-        let query = r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata]"#;
-        debug!("Running resolve_call_edges query");
+        let query = r#"?[source_qualified, target_qualified, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata], rel_type = "calls", target_qualified =~ "__unresolved__.*""#;
+        debug!("Running resolve_call_edges query (filtered at DB level)");
         let result = self.db.run_script(query, std::collections::BTreeMap::new())?;
-        debug!("Query returned {} rows", result.rows.len());
-        let mut resolved = 0;
+        let total_unresolved = result.rows.len();
+        debug!("Found {} unresolved call edges to resolve", total_unresolved);
+        
+        if total_unresolved == 0 {
+            return Ok(0);
+        }
 
-        for row in result.rows.iter() {
+        let mut resolved = 0;
+        let batch_size = 100;
+        let mut last_progress = 0;
+
+        for (idx, row) in result.rows.iter().enumerate() {
             let source = row[0].as_str().unwrap_or("").to_string();
-            let target_qualified = row[1].as_str().unwrap_or("").to_string();
-            let rel_type = row[2].as_str().unwrap_or("");
+            let target_qualified = row[1].as_str().unwrap_or("");
+            let meta_str = row[2].as_str().unwrap_or("{}");
             
-            if rel_type != "calls" || !target_qualified.starts_with("__unresolved__") {
-                continue;
-            }
-            
-            debug!("Processing unresolved call: {} -> {}", source, target_qualified);
-            
-            let meta_str = row[4].as_str().unwrap_or("{}");
             let bare_name = target_qualified.trim_start_matches("__unresolved__");
 
             let callee_file_hint: Option<String> = serde_json::from_str::<serde_json::Value>(meta_str)
@@ -1149,17 +1151,21 @@ impl GraphEngine {
                 .and_then(|m| m.get("callee_file_hint").cloned())
                 .and_then(|v| v.as_str().map(String::from));
 
-            let (target_qn, confidence) = self.find_function_by_name_with_confidence(&bare_name, callee_file_hint.as_deref())?;
-            if let Some(target_qn) = target_qn {
+            if let (Some(target_qn), confidence) = self.find_function_by_name_with_confidence(&bare_name, callee_file_hint.as_deref())? {
                 self.insert_relationship(&Relationship {
                     id: None,
-                    source_qualified: source.clone(),
+                    source_qualified: source,
                     target_qualified: target_qn,
                     rel_type: "calls".to_string(),
                     confidence,
                     metadata: serde_json::json!({}),
                 })?;
                 resolved += 1;
+            }
+
+            if idx - last_progress >= batch_size {
+                debug!("Progress: {}/{} resolved", resolved, total_unresolved);
+                last_progress = idx;
             }
         }
         

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::benchmark::data::BenchmarkResult;
 use std::error::Error;
 use std::path::PathBuf;
@@ -134,7 +135,6 @@ impl BenchmarkRunner {
     fn parse_kilo_output(&self, stdout: &str) -> BenchmarkResult {
         let mut total_tokens = 0u32;
         let mut input_tokens = 0u32;
-        let mut output_tokens = 0u32;
         let mut cached_tokens = 0u32;
 
         for line in stdout.lines() {
@@ -145,8 +145,6 @@ impl BenchmarkRunner {
                             tokens.get("total").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                         input_tokens =
                             tokens.get("input").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                        output_tokens =
-                            tokens.get("output").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                         cached_tokens = tokens
                             .get("cache")
                             .and_then(|c| c.get("read"))
@@ -242,7 +240,7 @@ impl BenchmarkRunner {
         }
     }
 
-    fn parse_opencode_output(&self, stdout: &str, stderr: &str) -> BenchmarkResult {
+    fn parse_opencode_output(&self, _stdout: &str, _stderr: &str) -> BenchmarkResult {
         BenchmarkResult {
             total_tokens: 0,
             input_tokens: 0,

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::db::models::CodeElement;
 use crate::graph::GraphEngine;
 use serde::{Deserialize, Serialize};

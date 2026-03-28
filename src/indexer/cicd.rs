@@ -325,7 +325,7 @@ impl CicdYamlExtractor {
                 }
             }
         } else if let Some(jobs) = yaml.get("jobs").and_then(|v| v.as_sequence()) {
-            for (job_idx, job) in jobs.iter().enumerate() {
+            for (_job_idx, job) in jobs.iter().enumerate() {
                 let job_name = job
                     .get("name")
                     .or_else(|| job.get("job"))

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+mod api;
 mod benchmark;
 mod cli;
 mod config;
@@ -217,6 +219,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let db_path = project_path.join(".leankg");
             detect_clusters(&db_path)?;
+        }
+        cli::CLICommand::ApiServe { port, auth } => {
+            let project_path = find_project_root()?;
+            let db_path = project_path.join(".leankg");
+            tokio::fs::create_dir_all(&db_path).await.ok();
+            api::start_api_server(port, db_path, auth).await?;
+        }
+        cli::CLICommand::ApiKey { command } => {
+            match command {
+                cli::ApiKeyCommand::Create { name } => {
+                    api_key_create(&name)?;
+                }
+                cli::ApiKeyCommand::List => {
+                    api_key_list()?;
+                }
+                cli::ApiKeyCommand::Revoke { id } => {
+                    api_key_revoke(&id)?;
+                }
+            }
         }
     }
 
@@ -1069,4 +1090,60 @@ fn detect_clusters(db_path: &std::path::Path) -> Result<(), Box<dyn std::error::
     println!("Done! Cluster assignments saved to the database.");
 
     Ok(())
+}
+
+fn api_key_create(name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let store = db::keys::ApiKeyStore::new()?;
+    let (key, api_key) = store.create_key(name)?;
+    
+    println!("API key created successfully!");
+    println!("  ID:   {}", api_key.id);
+    println!("  Name: {}", api_key.name);
+    println!("  Created: {}", api_key.created_at);
+    println!("\nIMPORTANT: Save this API key - it will not be shown again:");
+    println!("  {}", key);
+    
+    Ok(())
+}
+
+fn api_key_list() -> Result<(), Box<dyn std::error::Error>> {
+    let store = db::keys::ApiKeyStore::new()?;
+    let keys = store.list_keys()?;
+    
+    if keys.is_empty() {
+        println!("No API keys found. Create one with 'leankg api-key create --name <name>'");
+        return Ok(());
+    }
+    
+    println!("API Keys:");
+    for key in keys {
+        println!("  ID:        {}", key.id);
+        println!("  Name:      {}", key.name);
+        println!("  Created:   {}", key.created_at);
+        if let Some(last_used) = key.last_used_at {
+            println!("  Last used: {}", last_used);
+        }
+        println!();
+    }
+    
+    Ok(())
+}
+
+fn api_key_revoke(id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let store = db::keys::ApiKeyStore::new()?;
+    let revoked = store.revoke_key(id)?;
+    
+    if revoked {
+        println!("API key '{}' revoked successfully.", id);
+    } else {
+        println!("API key '{}' not found or already revoked.", id);
+    }
+    
+    Ok(())
+}
+
+async fn start_api_server_async(port: u16, require_auth: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let project_path = find_project_root()?;
+    let db_path = project_path.join(".leankg");
+    api::start_api_server(port, db_path, require_auth).await
 }

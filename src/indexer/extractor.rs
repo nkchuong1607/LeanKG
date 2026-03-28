@@ -517,7 +517,7 @@ impl<'a> EntityExtractor<'a> {
         node: Node,
         parent: Option<&str>,
         elements: &mut Vec<CodeElement>,
-        relationships: &mut Vec<Relationship>,
+        _relationships: &mut Vec<Relationship>,
     ) {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {

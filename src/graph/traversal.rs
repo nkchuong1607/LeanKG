@@ -1,4 +1,4 @@
-use crate::db::models::{CodeElement, Relationship};
+use crate::db::models::CodeElement;
 use crate::graph::GraphEngine;
 use std::collections::{HashSet, VecDeque};
 

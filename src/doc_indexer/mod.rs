@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::db::models::{CodeElement, Relationship};
 use crate::db::schema::CozoDb;
 use crate::graph::GraphEngine;
@@ -141,7 +142,7 @@ impl DocIndexer {
         let code_refs = self.extract_code_references(&content);
         let mut relationships = heading_rels;
 
-        for (target, context) in code_refs {
+        for (target, _context) in code_refs {
             let target_clone = target.clone();
             relationships.push(Relationship {
                 id: None,

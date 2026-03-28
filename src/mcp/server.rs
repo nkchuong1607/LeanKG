@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::db::schema::init_db;
 use crate::graph::GraphEngine;
 use crate::mcp::auth::AuthConfig;
@@ -6,8 +7,8 @@ use crate::mcp::tools::ToolRegistry;
 use crate::mcp::watcher::start_watcher;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, Content, ListToolsResult, ServerCapabilities,
-    ServerInfo, Tool,
+    CallToolRequestParams, CallToolResult, Content, ListToolsResult,
+    Tool,
 };
 use rmcp::service::{serve_server, RoleServer};
 use rmcp::transport::stdio;

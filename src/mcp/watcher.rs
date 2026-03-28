@@ -54,7 +54,7 @@ pub async fn start_watcher(
     watch_path: PathBuf,
     _rx: mpsc::Receiver<FileChange>,
 ) {
-    use crate::watcher::{FileWatcher, AsyncFileWatcher};
+    use crate::watcher::FileWatcher;
 
     let watcher = match FileWatcher::new(&watch_path) {
         Ok(w) => w,

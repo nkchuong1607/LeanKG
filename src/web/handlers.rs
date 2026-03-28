@@ -63,6 +63,7 @@ pub struct GraphEdge {
     pub rel_type: String,
 }
 
+#[allow(dead_code)]
 fn is_test_element(element: &crate::db::models::CodeElement) -> bool {
     let qn = &element.qualified_name;
     let fp = &element.file_path;
@@ -1392,7 +1393,7 @@ pub async fn api_graph_data(State(state): State<AppState>) -> impl IntoResponse 
                     .push(element.qualified_name.clone());
             }
             
-            for (file_path, element_ids) in &file_map {
+            for (file_path, _element_ids) in &file_map {
                 let file_node = GraphNode {
                     id: format!("file::{}", file_path),
                     label: file_path.split('/').last().unwrap_or(file_path).to_string(),
@@ -1501,6 +1502,7 @@ pub async fn api_query(
 
 #[derive(Deserialize)]
 pub struct PathSwitchRequest {
+    #[allow(dead_code)]
     pub path: String,
 }
 
@@ -1550,6 +1552,7 @@ pub async fn api_index_status(State(_state): State<AppState>) -> impl IntoRespon
 
 #[derive(Deserialize)]
 pub struct GitHubCloneRequest {
+    #[allow(dead_code)]
     pub url: String,
 }
 
