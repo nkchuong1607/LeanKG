@@ -1,31 +1,31 @@
 #![allow(dead_code)]
+pub mod auth;
 pub mod handlers;
 
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post, put},
+    routing::get,
     Json, Router,
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::db::schema::{init_db, CozoDb};
 use crate::graph::GraphEngine;
 
 #[derive(Clone)]
-pub struct AppState {
+pub struct ApiState {
     pub db_path: std::path::PathBuf,
-    pub current_project_path: std::path::PathBuf,
     db: Arc<RwLock<Option<CozoDb>>>,
 }
 
-impl AppState {
-    pub async fn new(db_path: std::path::PathBuf, current_project_path: std::path::PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+impl ApiState {
+    pub async fn new(db_path: std::path::PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             db_path,
-            current_project_path,
             db: Arc::new(RwLock::new(None)),
         })
     }
@@ -72,41 +72,56 @@ impl<T: serde::Serialize> IntoResponse for ApiResponse<T> {
     }
 }
 
-pub async fn start_server(
+impl<T: serde::Serialize> ApiResponse<T> {
+    pub fn success(data: T) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+        }
+    }
+
+    pub fn error(msg: &str) -> Self {
+        Self {
+            success: false,
+            data: None,
+            error: Some(msg.to_string()),
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct HealthResponse {
+    pub status: String,
+    pub version: String,
+}
+
+pub async fn start_api_server(
     port: u16,
     db_path: std::path::PathBuf,
+    require_auth: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let state = AppState::new(db_path.clone(), db_path).await?;
+    let state = ApiState::new(db_path).await?;
     state.init_db().await?;
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
-        .route("/", get(handlers::index))
-        .route("/health", get(handlers::index))
-        .route("/graph", get(handlers::graph))
-        .route("/browse", get(handlers::browse))
-        .route("/docs", get(handlers::docs))
-        .route("/annotate", get(handlers::annotate))
-        .route("/quality", get(handlers::quality))
-        .route("/export", get(handlers::export_page))
-        .route("/settings", get(handlers::settings))
-        .route("/api/elements", get(handlers::api_elements))
-        .route("/api/relationships", get(handlers::api_relationships))
-        .route("/api/annotations", get(handlers::api_annotations))
-        .route("/api/annotations", post(handlers::api_create_annotation))
-        .route("/api/annotations/:element", get(handlers::api_get_annotation))
-        .route("/api/annotations/:element", put(handlers::api_update_annotation))
-        .route("/api/search", get(handlers::api_search))
-        .route("/api/graph/data", get(handlers::api_graph_data))
-        .route("/api/export/graph", get(handlers::api_export_graph))
-        .route("/api/query", post(handlers::api_query))
-        .route("/api/path/switch", post(handlers::api_switch_path))
-        .route("/api/index/status", get(handlers::api_index_status))
-        .route("/api/github/clone", post(handlers::api_github_clone))
+        .route("/health", get(handlers::health))
+        .route("/api/v1/status", get(handlers::api_status))
+        .route("/api/v1/search", get(handlers::api_search))
+        .layer(cors)
         .with_state(state);
 
+    if require_auth {
+        println!("Warning: Auth not yet implemented, starting without auth");
+    }
+
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    println!("LeanKG Web UI listening on http://localhost:{}", port);
-    println!("Press Ctrl+C to stop");
+    println!("LeanKG REST API listening on http://localhost:{}", port);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

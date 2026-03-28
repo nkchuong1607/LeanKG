@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+pub mod keys;
 pub mod models;
 pub mod schema;
 
@@ -5,8 +7,6 @@ pub mod schema;
 pub use models::*;
 #[allow(unused_imports)]
 pub use schema::*;
-
-use crate::db::schema::CozoDb;
 
 pub fn create_business_logic(
     db: &CozoDb,

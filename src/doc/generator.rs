@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::db::models::{BusinessLogic, CodeElement, Relationship};
 use crate::graph::GraphEngine;
 use std::collections::HashMap;

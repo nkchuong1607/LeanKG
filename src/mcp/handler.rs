@@ -210,7 +210,7 @@ impl ToolHandler {
 
     async fn mcp_index(&self, args: &Value) -> Result<Value, String> {
         let path = args["path"].as_str().unwrap_or(".");
-        let incremental = args["incremental"].as_bool().unwrap_or(false);
+        let _incremental = args["incremental"].as_bool().unwrap_or(false);
         let lang = args["lang"].as_str();
         let exclude = args["exclude"].as_str();
 
