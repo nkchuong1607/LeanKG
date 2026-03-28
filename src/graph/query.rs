@@ -1123,20 +1123,22 @@ impl GraphEngine {
     }
 
     pub fn resolve_call_edges(&self) -> Result<usize, Box<dyn std::error::Error>> {
-        let query = format!(
-            r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata], rel_type = "{}""#,
-            "calls"
-        );
-        let result = self.db.run_script(&query, Default::default())?;
+        let query = r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata]"#;
+        eprintln!("DEBUG: Running query: {}", query);
+        let result = self.db.run_script(query, std::collections::BTreeMap::new())?;
+        eprintln!("DEBUG: Query returned {} rows", result.rows.len());
         let mut resolved = 0;
 
-        for row in &result.rows {
+        for (i, row) in result.rows.iter().enumerate() {
             let source = row[0].as_str().unwrap_or("").to_string();
             let target_qualified = row[1].as_str().unwrap_or("").to_string();
+            let rel_type = row[2].as_str().unwrap_or("");
             
-            if !target_qualified.starts_with("__unresolved__") {
+            if rel_type != "calls" || !target_qualified.starts_with("__unresolved__") {
                 continue;
             }
+            
+            eprintln!("DEBUG: Processing unresolved call: {} -> {}", source, target_qualified);
             
             let meta_str = row[4].as_str().unwrap_or("{}");
             let bare_name = target_qualified.trim_start_matches("__unresolved__");
@@ -1158,24 +1160,19 @@ impl GraphEngine {
                 })?;
                 resolved += 1;
             }
-
-            self.delete_relationship(&source, &target_qualified)?;
         }
+        
+        eprintln!("DEBUG: Resolved {} call edges", resolved);
 
         Ok(resolved)
     }
 
     fn find_function_by_name_with_confidence(&self, name: &str, file_hint: Option<&str>) -> Result<(Option<String>, f64), Box<dyn std::error::Error>> {
+        let safe_name = escape_datalog(name);
+        
         if let Some(hint) = file_hint {
-            let safe_name = escape_datalog(name);
             let safe_hint = escape_datalog(hint);
-            let query = format!(r#"
-                ?[qualified_name, file_path] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata],
-                  element_type = "function",
-                  name = "{}",
-                  file_path = "{}"
-                :limit 1
-            "#, safe_name, safe_hint);
+            let query = format!("?[qualified_name, file_path] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], element_type = \"function\", name = \"{}\", file_path = \"{}\" :limit 1", safe_name, safe_hint);
             let result = self.db.run_script(&query, Default::default())?;
             if let Some(row) = result.rows.first() {
                 let qn = row[0].as_str().map(String::from);
@@ -1183,28 +1180,9 @@ impl GraphEngine {
                 let confidence = if found_file == hint { 1.0 } else { 0.9 };
                 return Ok((qn, confidence));
             }
-
-            let query_all = format!(r#"
-                ?[qualified_name, file_path] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata],
-                  element_type = "function",
-                  name = "{}"
-                :limit 1
-            "#, safe_name);
-            let result_all = self.db.run_script(&query_all, Default::default())?;
-            if let Some(row) = result_all.rows.first() {
-                let qn = row[0].as_str().map(String::from);
-                return Ok((qn, 0.7));
-            }
-            return Ok((None, 0.3));
         }
 
-        let safe_name = escape_datalog(name);
-        let query = format!(r#"
-            ?[qualified_name] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata],
-              element_type = "function",
-              name = "{}"
-            :limit 1
-        "#, safe_name);
+        let query = format!("?[qualified_name] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata], element_type = \"function\", name = \"{}\" :limit 1", safe_name);
         let result = self.db.run_script(&query, Default::default())?;
         Ok((result.rows.first().and_then(|row| row[0].as_str().map(String::from)), 0.7))
     }
@@ -1212,10 +1190,7 @@ impl GraphEngine {
     fn delete_relationship(&self, source: &str, target: &str) -> Result<(), Box<dyn std::error::Error>> {
         let safe_source = escape_datalog(source);
         let safe_target = escape_datalog(target);
-        let query = format!(r#"
-            :rm relationships[source_qualified, target_qualified, rel_type, confidence, metadata]
-            := source_qualified = "{}", target_qualified = "{}"
-        "#, safe_source, safe_target);
+        let query = format!(":rm relationships[source_qualified, target_qualified, rel_type, confidence, metadata] := source_qualified = \"{}\", target_qualified = \"{}\"", safe_source, safe_target);
         self.db.run_script(&query, Default::default())?;
         Ok(())
     }
