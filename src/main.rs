@@ -17,6 +17,7 @@ use clap::Parser;
 
 #[derive(Parser, Debug)]
 #[command(name = "leankg")]
+#[command(version)]
 #[command(about = "Lightweight knowledge graph for AI-assisted development")]
 pub struct Args {
     #[command(subcommand)]
