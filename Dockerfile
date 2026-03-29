@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y clang git && rm -rf /var/lib/apt/lists/
 RUN cargo build --release && strip target/release/leankg
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates git && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/leankg /usr/local/bin/
 
 ENV PORT=8080
