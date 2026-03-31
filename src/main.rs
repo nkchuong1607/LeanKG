@@ -331,6 +331,7 @@ async fn index_codebase(
                     ("ts", "typescript"),
                     ("js", "javascript"),
                     ("py", "python"),
+                    ("java", "java"),
                 ]
                 .iter()
                 .cloned()

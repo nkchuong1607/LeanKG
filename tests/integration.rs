@@ -163,3 +163,49 @@ async fn test_index_file_go() {
     let count = index_file_sync(&graph, &mut parser, go_file.to_str().unwrap()).unwrap();
     assert!(count > 0);
 }
+
+#[tokio::test]
+async fn test_find_files_discovers_java_files() {
+    let tmp = TempDir::new().unwrap();
+    let java_dir = tmp.path().join("com").join("example");
+    std::fs::create_dir_all(&java_dir).unwrap();
+    std::fs::write(
+        java_dir.join("Main.java"),
+        "public class Main { public static void main(String[] args) {} }",
+    )
+    .unwrap();
+    let files = find_files_sync(tmp.path().to_str().unwrap()).unwrap();
+    assert!(!files.is_empty());
+    assert!(files.iter().any(|f| f.ends_with("Main.java")));
+}
+
+#[tokio::test]
+async fn test_index_file_java() {
+    let tmp = TempDir::new().unwrap();
+    let db_path = tmp.path().join("leankg.db");
+    let db = init_db(db_path.as_path()).unwrap();
+    let graph = GraphEngine::new(db);
+
+    let java_file = tmp.path().join("UserService.java");
+    std::fs::write(
+        &java_file,
+        "import com.example.model.User;\npublic class UserService {\n    public User createUser(String name) {\n        return new User(name);\n    }\n}",
+    )
+    .unwrap();
+
+    let mut parser = ParserManager::new();
+    if parser.init_parsers().is_err() {
+        return;
+    }
+    let count = index_file_sync(&graph, &mut parser, java_file.to_str().unwrap()).unwrap();
+    assert!(count > 0, "Should index Java elements, got {}", count);
+
+    let elements = graph.all_elements().unwrap();
+    let java_classes: Vec<_> = elements
+        .iter()
+        .filter(|e| e.element_type == "class" && e.language == "java")
+        .collect();
+    assert!(!java_classes.is_empty(), "Should find Java class");
+    assert_eq!(java_classes[0].name, "UserService");
+}
+

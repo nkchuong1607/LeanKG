@@ -6,6 +6,7 @@ pub struct ParserManager {
     pub ts_parser: Parser,
     pub python_parser: Parser,
     pub rust_parser: Parser,
+    pub java_parser: Parser,
 }
 
 impl ParserManager {
@@ -15,6 +16,7 @@ impl ParserManager {
             ts_parser: Parser::new(),
             python_parser: Parser::new(),
             rust_parser: Parser::new(),
+            java_parser: Parser::new(),
         }
     }
 
@@ -23,11 +25,13 @@ impl ParserManager {
         let ts_lang: tree_sitter::Language = tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into();
         let py_lang: tree_sitter::Language = tree_sitter_python::LANGUAGE.into();
         let rust_lang: tree_sitter::Language = tree_sitter_rust::LANGUAGE.into();
+        let java_lang: tree_sitter::Language = tree_sitter_java::LANGUAGE.into();
 
         self.go_parser.set_language(&go_lang)?;
         self.ts_parser.set_language(&ts_lang)?;
         self.python_parser.set_language(&py_lang)?;
         self.rust_parser.set_language(&rust_lang)?;
+        self.java_parser.set_language(&java_lang)?;
 
         Ok(())
     }
@@ -38,6 +42,7 @@ impl ParserManager {
             "typescript" | "javascript" => Some(&mut self.ts_parser),
             "python" => Some(&mut self.python_parser),
             "rust" => Some(&mut self.rust_parser),
+            "java" => Some(&mut self.java_parser),
             _ => None,
         }
     }
@@ -88,6 +93,13 @@ mod tests {
     }
 
     #[test]
+    fn test_get_parser_for_java() {
+        if let Some(mut pm) = init_parsers_if_compatible() {
+            assert!(pm.get_parser_for_language("java").is_some());
+        }
+    }
+
+    #[test]
     fn test_get_parser_for_unknown_returns_none() {
         let mut pm = ParserManager::new();
         assert!(pm.get_parser_for_language("unknown").is_none());
@@ -103,4 +115,15 @@ mod tests {
             assert!(tree.is_some());
         }
     }
+
+    #[test]
+    fn test_parser_parse_java_code() {
+        if let Some(mut pm) = init_parsers_if_compatible() {
+            let source = b"public class Main { public static void main(String[] args) {} }";
+            let parser = pm.get_parser_for_language("java").unwrap();
+            let tree = parser.parse(source, None);
+            assert!(tree.is_some());
+        }
+    }
 }
+
