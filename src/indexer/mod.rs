@@ -19,7 +19,7 @@ use walkdir::WalkDir;
 
 pub fn find_files_sync(root: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut files = Vec::new();
-    let extensions = ["go", "ts", "js", "py", "rs", "tf", "yml", "yaml"];
+    let extensions = ["go", "ts", "js", "py", "rs", "java", "tf", "yml", "yaml"];
 
     for entry in WalkDir::new(root)
         .follow_links(true)
@@ -65,6 +65,8 @@ fn get_language(file_path: &str) -> Option<&'static str> {
         Some("python")
     } else if file_path.ends_with(".rs") {
         Some("rust")
+    } else if file_path.ends_with(".java") {
+        Some("java")
     } else {
         None
     }
@@ -92,7 +94,7 @@ fn extract_elements_for_file(file_path: &str) -> Result<ParsedFile, Box<dyn std:
     };
 
     thread_local! {
-        static PARSERS: std::cell::RefCell<Vec<Option<tree_sitter::Parser>>> = std::cell::RefCell::new(vec![None, None, None, None]);
+        static PARSERS: std::cell::RefCell<Vec<Option<tree_sitter::Parser>>> = std::cell::RefCell::new(vec![None, None, None, None, None]);
     }
 
     let parser_idx = match language {
@@ -100,6 +102,7 @@ fn extract_elements_for_file(file_path: &str) -> Result<ParsedFile, Box<dyn std:
         "typescript" => 1,
         "python" => 2,
         "rust" => 3,
+        "java" => 4,
         _ => return Ok(ParsedFile { element_count: 0, elements: vec![], relationships: vec![] }),
     };
 
@@ -112,6 +115,7 @@ fn extract_elements_for_file(file_path: &str) -> Result<ParsedFile, Box<dyn std:
                 "typescript" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
                 "python" => tree_sitter_python::LANGUAGE.into(),
                 "rust" => tree_sitter_rust::LANGUAGE.into(),
+                "java" => tree_sitter_java::LANGUAGE.into(),
                 _ => return p,
             };
             let _ = p.set_language(&lang);
@@ -244,6 +248,8 @@ pub fn index_file_sync(
         "python"
     } else if file_path.ends_with(".rs") {
         "rust"
+    } else if file_path.ends_with(".java") {
+        "java"
     } else {
         return Ok(0);
     };
