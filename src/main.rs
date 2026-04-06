@@ -2,6 +2,7 @@
 mod api;
 mod benchmark;
 mod cli;
+mod compress;
 mod config;
 mod db;
 mod doc;
@@ -9,6 +10,7 @@ mod doc_indexer;
 mod graph;
 mod indexer;
 mod mcp;
+mod orchestrator;
 mod registry;
 mod watcher;
 mod web;

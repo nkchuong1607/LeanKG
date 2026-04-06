@@ -1,5 +1,7 @@
+use crate::compress::{FileReader, ReadMode};
 use crate::db::models::{CodeElement, Relationship};
 use crate::graph::{GraphEngine, ImpactAnalyzer};
+use crate::orchestrator::QueryOrchestrator;
 use serde_json::{json, Value};
 
 const INSTRUCTIONS_CONTENT: &str = r#"# LeanKG Tools - Usage Instructions
@@ -106,13 +108,15 @@ get_call_graph({ function: "src/auth.rs::authenticate" })
 pub struct ToolHandler {
     graph_engine: GraphEngine,
     db_path: std::path::PathBuf,
+    orchestrator: QueryOrchestrator,
 }
 
 impl ToolHandler {
     pub fn new(graph_engine: GraphEngine, db_path: std::path::PathBuf) -> Self {
         Self {
-            graph_engine,
+            graph_engine: graph_engine.clone(),
             db_path,
+            orchestrator: QueryOrchestrator::new(graph_engine),
         }
     }
 
@@ -131,6 +135,8 @@ impl ToolHandler {
             "get_impact_radius" => self.get_impact_radius(arguments),
             "get_review_context" => self.get_review_context(arguments),
             "get_context" => self.get_context(arguments),
+            "ctx_read" => self.ctx_read(arguments),
+            "orchestrate" => self.orchestrate_tool(arguments),
             "find_function" => self.find_function(arguments),
             "get_callers" => self.get_callers(arguments),
             "get_call_graph" => self.get_call_graph(arguments),
@@ -151,6 +157,66 @@ impl ToolHandler {
             "get_cluster_context" => self.get_cluster_context(arguments),
             _ => Err(format!("Unknown tool: {}", tool_name)),
         }
+    }
+
+    fn ctx_read(&self, args: &Value) -> Result<Value, String> {
+        let file = args["file"].as_str().ok_or("Missing 'file' parameter")?;
+        let mode_str = args["mode"].as_str().unwrap_or("adaptive");
+        let lines_spec = args["lines"].as_str();
+
+        let requested_mode = ReadMode::from_str(mode_str)
+            .ok_or_else(|| format!("Invalid mode: {}. Valid modes: adaptive, full, map, signatures, diff, aggressive, entropy, lines", mode_str))?;
+
+        let mut reader = FileReader::new();
+        
+        let result = if requested_mode == ReadMode::Adaptive {
+            let content = std::fs::read_to_string(file)
+                .map_err(|e| format!("Failed to read file {}: {}", file, e))?;
+            let lines: Vec<&str> = content.lines().collect();
+            let lines_count = lines.len();
+            let file_size = content.len();
+            
+            let selected_mode = ReadMode::select_adaptive(file, file_size, lines_count);
+            reader.read(file, selected_mode, lines_spec).map_err(|e| e.to_string())?
+        } else {
+            reader.read(file, requested_mode, lines_spec).map_err(|e| e.to_string())?
+        };
+
+        Ok(json!({
+            "path": result.path,
+            "mode": format!("{:?}", result.mode),
+            "content": result.content,
+            "tokens": result.tokens,
+            "total_tokens": result.total_tokens,
+            "savings_percent": result.savings_percent
+        }))
+    }
+
+    fn orchestrate_tool(&self, args: &Value) -> Result<Value, String> {
+        let intent = args["intent"].as_str().ok_or("Missing 'intent' parameter")?;
+        let file = args["file"].as_str();
+        let mode = args["mode"].as_str();
+        let fresh = args["fresh"].as_bool().unwrap_or(false);
+
+        let result = self.orchestrator.orchestrate(
+            intent,
+            file,
+            mode,
+            fresh,
+        )?;
+
+        Ok(json!({
+            "intent": result.intent,
+            "query_type": result.query_type,
+            "content": result.content,
+            "mode": result.mode,
+            "tokens": result.tokens,
+            "total_tokens": result.total_tokens,
+            "savings_percent": result.savings_percent,
+            "is_cached": result.is_cached,
+            "cache_key": result.cache_key,
+            "elements_count": result.elements_count
+        }))
     }
 
     fn mcp_init(&self, args: &Value) -> Result<Value, String> {

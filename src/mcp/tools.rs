@@ -161,6 +161,33 @@ impl ToolRegistry {
                 }),
             },
             ToolDefinition {
+                name: "orchestrate".to_string(),
+                description: "Smart context orchestration with caching. Provide natural language intent like 'show me impact of changing function X' or 'get context for file Y'. Internally: checks cache -> queries graph -> compresses -> caches result. Use this instead of multiple individual tools when you want LeanKG to optimize the flow.".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "intent": {"type": "string", "description": "Natural language intent (e.g., 'show me impact of changing main.rs', 'get context for handler.rs', 'find function named parse')"},
+                        "file": {"type": "string", "description": "Optional: specific file to query"},
+                        "mode": {"type": "string", "enum": ["adaptive", "full", "map", "signatures"], "default": "adaptive", "description": "Compression mode for file content"},
+                        "fresh": {"type": "boolean", "default": false, "description": "Force fresh query, bypass cache"}
+                    },
+                    "required": ["intent"]
+                }),
+            },
+            ToolDefinition {
+                name: "ctx_read".to_string(),
+                description: "Read file with compression modes for efficient LLM context".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": "string", "description": "File path to read"},
+                        "mode": {"type": "string", "enum": ["adaptive", "full", "map", "signatures", "diff", "aggressive", "entropy", "lines"], "default": "adaptive", "description": "Compression mode"},
+                        "lines": {"type": "string", "description": "Lines specification for 'lines' mode (e.g., '1-10,20,30-40')"}
+                    },
+                    "required": ["file"]
+                }),
+            },
+            ToolDefinition {
                 name: "find_function".to_string(),
                 description: "Locate function definition by name. Optionally scope to a file.".to_string(),
                 input_schema: json!({
