@@ -4,7 +4,6 @@ pub mod intent;
 use crate::compress::{FileReader, ReadMode};
 use crate::graph::GraphEngine;
 use cache::{CachedContent, OrchestratorCache};
-use cozo;
 use intent::{Intent, IntentParser};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -311,7 +310,12 @@ impl QueryOrchestrator {
 
     fn resolve_mode(&self, mode: Option<&str>, file: &str) -> ReadMode {
         if let Some(m) = mode {
-            ReadMode::from_str(m).unwrap_or(ReadMode::Adaptive)
+            let parsed = ReadMode::from_str(m);
+            match parsed {
+                Some(ReadMode::Adaptive) => ReadMode::select_adaptive(file, 1000, 100),
+                Some(m) => m,
+                None => ReadMode::select_adaptive(file, 1000, 100),
+            }
         } else {
             ReadMode::select_adaptive(file, 1000, 100)
         }

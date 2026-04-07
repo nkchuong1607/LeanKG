@@ -22,6 +22,9 @@ use clap::Parser;
 #[command(version)]
 #[command(about = "Lightweight knowledge graph for AI-assisted development")]
 pub struct Args {
+    /// Enable compressed output for shell commands (RTK-style)
+    #[arg(long, global = true)]
+    pub compress: bool,
     #[command(subcommand)]
     pub command: cli::CLICommand,
 }
@@ -250,6 +253,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         cli::CLICommand::Setup {} => {
             setup_global()?;
+        }
+        cli::CLICommand::Run { command, compress } => {
+            run_shell_command(&command, compress)?;
         }
         cli::CLICommand::DetectClusters {
             path,
@@ -1349,4 +1355,28 @@ fn export_mermaid(relationships: &[db::models::Relationship]) -> String {
         ));
     }
     mermaid
+}
+
+fn run_shell_command(command: &[String], compress: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if command.is_empty() {
+        eprintln!("No command provided. Usage: leankg run -- <command>");
+        return Ok(());
+    }
+
+    let program = &command[0];
+    let args: Vec<&str> = command[1..].iter().map(|s| s.as_str()).collect();
+
+    let runner = cli::shell_runner::ShellRunner::new(compress);
+
+    match runner.run(program, &args, &command.join(" ")) {
+        Ok(output) => {
+            println!("{}", output);
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
 }

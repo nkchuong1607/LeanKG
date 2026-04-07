@@ -113,13 +113,14 @@ impl ToolRegistry {
             },
             ToolDefinition {
                 name: "get_impact_radius".to_string(),
-                description: "Get all files affected by change within N hops. Keep depth<=2 for LLM context budgets. Depth 3 may return hundreds of nodes. Results include confidence scores (0.0-1.0) and severity classification (WILL BREAK, LIKELY AFFECTED, MAY BE AFFECTED).".to_string(),
+                description: "Get all files affected by change within N hops. Keep depth<=2 for LLM context budgets. Depth 3 may return hundreds of nodes. Results include confidence scores (0.0-1.0) and severity classification (WILL BREAK, LIKELY AFFECTED, MAY BE AFFECTED). Set compress_response=true for token-optimized output.".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
                         "file": {"type": "string", "description": "File to analyze"},
                         "depth": {"type": "integer", "default": 3, "description": "Hop depth (default: 3). Keep <=2 for context budgets."},
-                        "min_confidence": {"type": "number", "default": 0.0, "description": "Minimum confidence threshold (0.0-1.0). Only return results with confidence >= this value."}
+                        "min_confidence": {"type": "number", "default": 0.0, "description": "Minimum confidence threshold (0.0-1.0). Only return results with confidence >= this value."},
+                        "compress_response": {"type": "boolean", "default": false, "description": "Enable RTK-style compression for token savings"}
                     },
                     "required": ["file"]
                 }),

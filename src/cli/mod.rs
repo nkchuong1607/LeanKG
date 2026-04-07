@@ -1,5 +1,7 @@
 use clap::Subcommand;
 
+pub mod shell_runner;
+
 #[derive(Subcommand, Debug)]
 pub enum CLICommand {
     /// Show LeanKG version
@@ -177,6 +179,14 @@ pub enum CLICommand {
     },
     /// Global setup: configure MCP for all registered repos at once
     Setup {},
+    /// Run a shell command with optional RTK-style compression
+    Run {
+        /// Command to run (e.g., "git status", "cargo test")
+        command: Vec<String>,
+        /// Enable compression (RTK-style)
+        #[arg(long)]
+        compress: bool,
+    },
     /// Run community detection to identify code clusters
     DetectClusters {
         /// Path to the project (default: current directory)

@@ -3,7 +3,7 @@ pub mod data;
 pub mod runner;
 pub mod summary;
 
-pub use context_parser::{ContextParser, QualityMetrics};
+pub use context_parser::QualityMetrics;
 
 use std::path::PathBuf;
 

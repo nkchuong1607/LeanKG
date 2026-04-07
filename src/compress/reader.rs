@@ -51,8 +51,8 @@ impl FileReader {
         };
 
         let tokens = self.estimate_tokens(&result.content);
-        let savings_percent = if total_tokens > 0 {
-            ((total_tokens - tokens) as f64 / total_tokens as f64 * 100.0)
+        let savings_percent = if total_tokens > 0 && tokens <= total_tokens {
+            (total_tokens - tokens) as f64 / total_tokens as f64 * 100.0
         } else {
             0.0
         };

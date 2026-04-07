@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 pub struct EntropyAnalyzer {
+    #[allow(dead_code)]
     window_size: usize,
     #[allow(dead_code)]
     jaccard_threshold: f64,

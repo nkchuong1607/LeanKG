@@ -62,7 +62,7 @@ impl ReadMode {
         }
     }
 
-    pub fn select_adaptive(file_path: &str, file_size: usize, lines: usize) -> Self {
+    pub fn select_adaptive(file_path: &str, _file_size: usize, lines: usize) -> Self {
         let extension = std::path::Path::new(file_path)
             .extension()
             .and_then(|e| e.to_str())

@@ -152,8 +152,8 @@ pub fn generate_markdown_report(
         "- Elements valid: {} ({:.1}%)\n",
         report.datastore_elements_valid,
         if report.datastore_elements_checked > 0 {
-            (report.datastore_elements_valid as f32 / report.datastore_elements_checked as f32
-                * 100.0)
+            report.datastore_elements_valid as f32 / report.datastore_elements_checked as f32
+                * 100.0
         } else {
             0.0
         }

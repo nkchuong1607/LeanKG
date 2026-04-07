@@ -576,7 +576,7 @@ fn test_cli_export_defaults() {
     let args = TestArgs::try_parse_from(["leankg", "export"]).unwrap();
     match args.command {
         CLICommand::Export { output, .. } => {
-            assert_eq!(output, "graph.html");
+            assert_eq!(output, "graph.json");
         }
         _ => panic!("expected Export command"),
     }

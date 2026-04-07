@@ -35,7 +35,7 @@ impl IntentParser {
             },
             IntentPattern {
                 keywords: vec![
-                    "impact", "affect", "changing", "change", "effects", "ripple", "break",
+                    "impact", "affect", "changing", "change", "changes", "effects", "ripple", "break",
                 ],
                 query_type: "impact",
                 confidence: 0.85,
@@ -165,6 +165,20 @@ impl IntentParser {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Try to extract identifier after function/class keywords
+        let func_markers = ["function ", "class ", "struct ", "enum ", "trait ", "impl "];
+        for marker in &func_markers {
+            if let Some(pos) = text.find(marker) {
+                let start = pos + marker.len();
+                let rest = &text[start..];
+                let first_token_end = rest.find(|c: char| c.is_whitespace() || c == '(' || c == '{').unwrap_or(rest.len());
+                let first_token = &rest[..first_token_end];
+                if !first_token.is_empty() && first_token.len() > 1 {
+                    return Some(first_token.to_string());
                 }
             }
         }

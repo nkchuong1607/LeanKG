@@ -1,4 +1,4 @@
-use crate::compress::{FileReader, ReadMode};
+use crate::compress::{FileReader, ReadMode, ResponseCompressor};
 use crate::db::models::{CodeElement, Relationship};
 use crate::graph::{GraphEngine, ImpactAnalyzer};
 use crate::orchestrator::QueryOrchestrator;
@@ -117,6 +117,24 @@ impl ToolHandler {
             graph_engine: graph_engine.clone(),
             db_path,
             orchestrator: QueryOrchestrator::new(graph_engine),
+        }
+    }
+
+    fn maybe_compress(&self, response: Value, args: &Value, tool_name: &str) -> Value {
+        let compress = args["compress_response"].as_bool().unwrap_or(false);
+        if !compress {
+            return response;
+        }
+
+        let compressor = ResponseCompressor::new();
+        match tool_name {
+            "get_impact_radius" => compressor.compress_impact_radius(&response),
+            "get_call_graph" => compressor.compress_call_graph(&response),
+            "search_code" => compressor.compress_search_code(&response),
+            "get_dependencies" => compressor.compress_dependencies(&response),
+            "get_dependents" => compressor.compress_dependents(&response),
+            "get_context" => compressor.compress_context(&response),
+            _ => response,
         }
     }
 
@@ -716,7 +734,7 @@ impl ToolHandler {
             .calculate_impact_radius_with_confidence(file, depth, min_confidence)
             .map_err(|e| e.to_string())?;
 
-        Ok(json!({
+        let response = json!({
             "start_file": result.start_file,
             "max_depth": result.max_depth,
             "affected": result.affected_elements.len(),
@@ -735,7 +753,9 @@ impl ToolHandler {
                 "severity": a.severity,
                 "depth": a.depth
             })).collect::<Vec<_>>()
-        }))
+        });
+
+        Ok(self.maybe_compress(response, args, "get_impact_radius"))
     }
 
     fn get_review_context(&self, args: &Value) -> Result<Value, String> {
