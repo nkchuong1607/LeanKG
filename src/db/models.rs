@@ -151,6 +151,54 @@ pub struct Document {
     pub last_updated: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ContextMetric {
+    pub id: String,
+    pub tool_name: String,
+    pub timestamp: i64,
+    pub project_path: String,
+    pub input_tokens: i32,
+    pub output_tokens: i32,
+    pub output_elements: i32,
+    pub execution_time_ms: i32,
+    pub baseline_tokens: i32,
+    pub baseline_lines_scanned: i32,
+    pub tokens_saved: i32,
+    pub savings_percent: f64,
+    pub correct_elements: Option<i32>,
+    pub total_expected: Option<i32>,
+    pub f1_score: Option<f64>,
+    pub query_pattern: Option<String>,
+    pub query_file: Option<String>,
+    pub query_depth: Option<i32>,
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsSummary {
+    pub total_invocations: i64,
+    pub total_tokens_saved: i64,
+    pub average_savings_percent: f64,
+    pub retention_days: i32,
+    pub by_tool: Vec<ToolMetrics>,
+    pub by_day: Vec<DailyMetrics>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolMetrics {
+    pub tool_name: String,
+    pub calls: i64,
+    pub avg_savings_percent: f64,
+    pub total_saved: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyMetrics {
+    pub date: String,
+    pub calls: i64,
+    pub savings: i64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

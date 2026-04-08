@@ -4,6 +4,7 @@ use crate::graph::GraphEngine;
 use crate::mcp::auth::AuthConfig;
 use crate::mcp::handler::ToolHandler;
 use crate::mcp::tools::ToolRegistry;
+use crate::mcp::tracker::WriteTracker;
 use crate::mcp::watcher::start_watcher;
 use parking_lot::RwLock;
 use rmcp::handler::server::ServerHandler;
@@ -19,6 +20,7 @@ pub struct MCPServer {
     db_path: Arc<RwLock<PathBuf>>,
     graph_engine: Arc<parking_lot::Mutex<Option<GraphEngine>>>,
     watch_path: Option<PathBuf>,
+    write_tracker: Arc<WriteTracker>,
 }
 
 impl std::fmt::Debug for MCPServer {
@@ -36,6 +38,7 @@ impl Clone for MCPServer {
             db_path: self.db_path.clone(),
             graph_engine: self.graph_engine.clone(),
             watch_path: self.watch_path.clone(),
+            write_tracker: self.write_tracker.clone(),
         }
     }
 }
@@ -47,6 +50,7 @@ impl MCPServer {
             db_path: Arc::new(RwLock::new(db_path)),
             graph_engine: Arc::new(parking_lot::Mutex::new(None)),
             watch_path: None,
+            write_tracker: Arc::new(WriteTracker::new()),
         }
     }
 
@@ -56,6 +60,7 @@ impl MCPServer {
             db_path: Arc::new(RwLock::new(db_path)),
             graph_engine: Arc::new(parking_lot::Mutex::new(None)),
             watch_path: Some(watch_path),
+            write_tracker: Arc::new(WriteTracker::new()),
         }
     }
 
@@ -352,6 +357,44 @@ impl MCPServer {
         Ok(())
     }
 
+    async fn trigger_reindex(&self) -> Result<(), String> {
+        let project_root = self.find_project_root()?;
+        let db = init_db(&self.get_db_path()).map_err(|e| format!("Database error: {}", e))?;
+        let graph_engine = crate::graph::GraphEngine::new(db);
+        let mut parser_manager = crate::indexer::ParserManager::new();
+        parser_manager
+            .init_parsers()
+            .map_err(|e| format!("Parser init error: {}", e))?;
+
+        let root_str = project_root.to_string_lossy().to_string();
+        match crate::indexer::incremental_index_sync(&graph_engine, &mut parser_manager, &root_str).await {
+            Ok(result) => {
+                tracing::info!("Reindex triggered by external write: {} files processed", result.total_files_processed);
+            }
+            Err(e) => {
+                tracing::warn!("Reindex failed: {}", e);
+            }
+        }
+
+        {
+            let mut guard = self.graph_engine.lock();
+            *guard = None;
+        }
+        Ok(())
+    }
+
+    fn load_config(&self, project_root: &std::path::Path) -> Result<crate::config::ProjectConfig, String> {
+        let config_path = project_root.join(".leankg/leankg.yaml");
+        if config_path.exists() {
+            let content = std::fs::read_to_string(&config_path)
+                .map_err(|e| format!("Failed to read config: {}", e))?;
+            serde_yaml::from_str::<crate::config::ProjectConfig>(&content)
+                .map_err(|e| format!("Failed to parse config: {}", e))
+        } else {
+            Ok(crate::config::ProjectConfig::default())
+        }
+    }
+
     fn find_project_root(&self) -> Result<std::path::PathBuf, String> {
         let current_dir =
             std::env::current_dir().map_err(|e| format!("Failed to get current dir: {}", e))?;
@@ -425,6 +468,15 @@ impl MCPServer {
                     *db_path_guard = new_db_path.clone();
                 }
                 tracing::info!("Updated db_path to {}", new_db_path.display());
+            }
+        }
+
+        if self.write_tracker.is_dirty() {
+            let config = self.load_config(&project_root)?;
+            if config.mcp.auto_index_on_db_write {
+                tracing::info!("External write detected, triggering incremental reindex...");
+                self.trigger_reindex().await?;
+                self.write_tracker.clear_dirty();
             }
         }
 

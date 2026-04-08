@@ -29,6 +29,7 @@ pub struct McpConfig {
     pub auth_token: String,
     pub auto_index_on_start: bool,
     pub auto_index_threshold_minutes: u64,
+    pub auto_index_on_db_write: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +60,7 @@ impl Default for ProjectConfig {
                 auth_token: "".to_string(),
                 auto_index_on_start: true,
                 auto_index_threshold_minutes: 5,
+                auto_index_on_db_write: true,
             },
             documentation: DocConfig {
                 output: PathBuf::from("./docs"),

@@ -286,6 +286,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 api_key_revoke(&id)?;
             }
         },
+        cli::CLICommand::Metrics {
+            since,
+            tool,
+            json,
+            session,
+            reset,
+            retention,
+            cleanup,
+        } => {
+            let project_path = find_project_root()?;
+            let db_path = project_path.join(".leankg");
+            show_metrics(
+                &db_path,
+                since.as_deref(),
+                tool.as_deref(),
+                json,
+                session,
+                reset,
+                retention,
+                cleanup,
+            )?;
+        }
     }
 
     Ok(())
@@ -1166,6 +1188,89 @@ fn api_key_revoke(id: &str) -> Result<(), Box<dyn std::error::Error>> {
         println!("API key '{}' revoked successfully.", id);
     } else {
         println!("API key '{}' not found or already revoked.", id);
+    }
+
+    Ok(())
+}
+
+fn show_metrics(
+    db_path: &std::path::Path,
+    since: Option<&str>,
+    tool: Option<&str>,
+    json: bool,
+    session: bool,
+    reset: bool,
+    retention: Option<i32>,
+    cleanup: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let db = db::schema::init_db(db_path)?;
+
+    if reset {
+        let count = db::reset_metrics(&db)?;
+        println!("Reset {} metric record(s).", count);
+        return Ok(());
+    }
+
+    if cleanup {
+        let ret_days = retention.unwrap_or(30);
+        let count = db::cleanup_old_metrics(&db, ret_days)?;
+        println!("Cleaned up {} old metric record(s) (retention: {} days).", count, ret_days);
+        return Ok(());
+    }
+
+    let ret_days = if let Some(s) = since {
+        if s.ends_with('d') {
+            s[..s.len() - 1].parse().unwrap_or(30)
+        } else {
+            s.parse().unwrap_or(30)
+        }
+    } else {
+        retention.unwrap_or(30)
+    };
+
+    let summary = db::get_metrics_summary(&db, tool, ret_days)?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&summary)?);
+        return Ok(());
+    }
+
+    println!("=== LeanKG Context Metrics ===\n");
+    println!(
+        "Total Savings: {} tokens across {} calls",
+        summary.total_tokens_saved, summary.total_invocations
+    );
+    println!(
+        "Average Savings: {:.1}%",
+        summary.average_savings_percent
+    );
+    println!("Retention: {} days", summary.retention_days);
+
+    if !summary.by_tool.is_empty() {
+        println!("\nBy Tool:");
+        for tm in &summary.by_tool {
+            println!(
+                "  {}: {} calls,  avg {:.0}% saved, {} tokens saved",
+                tm.tool_name,
+                tm.calls,
+                tm.avg_savings_percent,
+                tm.total_saved
+            );
+        }
+    }
+
+    if !summary.by_day.is_empty() {
+        println!("\nBy Day:");
+        for dm in &summary.by_day {
+            println!(
+                "  {}:  {} calls, {} tokens saved",
+                dm.date, dm.calls, dm.savings
+            );
+        }
+    }
+
+    if session {
+        println!("\nSession: Showing current session metrics not yet implemented");
     }
 
     Ok(())

@@ -210,6 +210,30 @@ pub enum CLICommand {
         #[command(subcommand)]
         command: ApiKeyCommand,
     },
+    /// Show context metrics (token savings, usage stats)
+    Metrics {
+        /// Show metrics from the last N days (e.g., 7d, 30d)
+        #[arg(long)]
+        since: Option<String>,
+        /// Filter by tool name (e.g., search_code, get_context)
+        #[arg(long)]
+        tool: Option<String>,
+        /// Output in JSON format
+        #[arg(long, short)]
+        json: bool,
+        /// Show metrics for current session only
+        #[arg(long)]
+        session: bool,
+        /// Reset all metrics
+        #[arg(long)]
+        reset: bool,
+        /// Set retention period in days (for cleanup)
+        #[arg(long)]
+        retention: Option<i32>,
+        /// Run cleanup to remove old metrics
+        #[arg(long)]
+        cleanup: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

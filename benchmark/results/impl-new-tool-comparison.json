@@ -1,24 +1,36 @@
 {
   "overhead": {
     "time_delta": 0.0,
-    "token_delta": -5175,
+    "token_delta": 209,
     "token_delta_percent": 0.0
   },
   "task": "impl-new-tool",
   "with_leankg": {
     "build_time_seconds": 0.0,
-    "cached_tokens": 256,
-    "input_tokens": 31789,
+    "cached_tokens": 21824,
+    "context": {
+      "files_referenced": [
+        "src/mcp/tools.rs",
+        "src/mcp/handler.rs"
+      ]
+    },
+    "input_tokens": 253,
     "success": true,
     "token_percent": 0.0,
-    "total_tokens": 32166
+    "total_tokens": 22229
   },
   "without_leankg": {
     "build_time_seconds": 0.0,
-    "cached_tokens": 2304,
-    "input_tokens": 34824,
+    "cached_tokens": 21632,
+    "context": {
+      "files_referenced": [
+        "src/mcp/tools.rs",
+        "src/mcp/handler.rs"
+      ]
+    },
+    "input_tokens": 257,
     "success": true,
     "token_percent": 0.0,
-    "total_tokens": 37341
+    "total_tokens": 22020
   }
 }

@@ -1,14 +1,16 @@
 # Benchmark Comparison: impl-new-tool
 
 ## With LeanKG
-- Total Tokens: 32166
-- Input: 31789
-- Cached: 256
+- Total Tokens: 22229
+- Input: 253
+- Cached: 21824
+- Files Referenced: ["src/mcp/tools.rs", "src/mcp/handler.rs"]
 
 ## Without LeanKG
-- Total Tokens: 37341
-- Input: 34824
-- Cached: 2304
+- Total Tokens: 22020
+- Input: 257
+- Cached: 21632
+- Files Referenced: ["src/mcp/tools.rs", "src/mcp/handler.rs"]
 
 ## Overhead
-- Token Delta: -5175
+- Token Delta: 209

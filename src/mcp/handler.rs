@@ -1,8 +1,12 @@
 use crate::compress::{FileReader, ReadMode, ResponseCompressor};
 use crate::db::models::{CodeElement, Relationship};
+use crate::db::record_metric;
+use crate::db::models::ContextMetric;
 use crate::graph::{GraphEngine, ImpactAnalyzer};
 use crate::orchestrator::QueryOrchestrator;
 use serde_json::{json, Value};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::process::Command;
 
 const INSTRUCTIONS_CONTENT: &str = r#"# LeanKG Tools - Usage Instructions
 
@@ -139,7 +143,12 @@ impl ToolHandler {
     }
 
     pub async fn execute_tool(&self, tool_name: &str, arguments: &Value) -> Result<Value, String> {
-        match tool_name {
+        let start_time = Instant::now();
+        let project_path = std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        let result = match tool_name {
             "mcp_init" => self.mcp_init(arguments),
             "mcp_index" => self.mcp_index(arguments).await,
             "mcp_index_docs" => self.mcp_index_docs(arguments),
@@ -174,6 +183,157 @@ impl ToolHandler {
             "get_clusters" => self.get_clusters(arguments),
             "get_cluster_context" => self.get_cluster_context(arguments),
             _ => Err(format!("Unknown tool: {}", tool_name)),
+        };
+
+        let execution_time_ms = start_time.elapsed().as_millis() as i32;
+        let input_tokens = arguments.to_string().len() as i32 / 4;
+
+        let (output_tokens, output_elements, baseline_tokens, baseline_lines, success) = match &result {
+            Ok(response) => {
+                let response_str = response.to_string();
+                let output_tok = response_str.len() as i32 / 4;
+                let out_elem = Self::count_response_elements(response);
+                let (base_tok, base_lines) = self.estimate_baseline(tool_name, arguments);
+                (output_tok, out_elem, base_tok, base_lines, true)
+            }
+            Err(_) => (0, 0, 0, 0, false),
+        };
+
+        let tokens_saved = baseline_tokens - output_tokens;
+        let savings_percent = if baseline_tokens > 0 {
+            (tokens_saved as f64 / baseline_tokens as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let metric = ContextMetric {
+            id: uuid::Uuid::new_v4().to_string(),
+            tool_name: tool_name.to_string(),
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64,
+            project_path,
+            input_tokens,
+            output_tokens,
+            output_elements,
+            execution_time_ms,
+            baseline_tokens,
+            baseline_lines_scanned: baseline_lines,
+            tokens_saved,
+            savings_percent,
+            correct_elements: None,
+            total_expected: None,
+            f1_score: None,
+            query_pattern: arguments["query"].as_str().map(String::from),
+            query_file: arguments["file"].as_str().map(String::from),
+            query_depth: arguments["depth"].as_i64().map(|d| d as i32),
+            success,
+        };
+
+        if let Err(e) = record_metric(self.graph_engine.db(), &metric) {
+            eprintln!("Failed to record metric: {}", e);
+        }
+
+        result
+    }
+
+    fn estimate_baseline(&self, tool_name: &str, args: &Value) -> (i32, i32) {
+        let src_path = "./src";
+        match tool_name {
+            "search_code" => {
+                if let Some(query) = args["query"].as_str() {
+                    let output = Command::new("grep")
+                        .args(&["-rn", "--include=*.rs", query, src_path])
+                        .output();
+                    if let Ok(out) = output {
+                        let lines = String::from_utf8_lossy(&out.stdout);
+                        let line_count = lines.lines().count();
+                        return (line_count as i32 * 4, line_count as i32);
+                    }
+                }
+                (0, 0)
+            }
+            "find_function" => {
+                if let Some(name) = args["name"].as_str() {
+                    let output = Command::new("grep")
+                        .args(&["-rn", "--include=*.rs", name, src_path])
+                        .output();
+                    if let Ok(out) = output {
+                        let lines = String::from_utf8_lossy(&out.stdout);
+                        let line_count = lines.lines().count();
+                        return (line_count as i32 * 4, line_count as i32);
+                    }
+                }
+                (0, 0)
+            }
+            "query_file" => {
+                if let Some(pattern) = args["pattern"].as_str() {
+                    let output = Command::new("find")
+                        .args(&[src_path, "-name", pattern])
+                        .output();
+                    if let Ok(out) = output {
+                        let files = String::from_utf8_lossy(&out.stdout);
+                        let file_count = files.lines().count();
+                        return (file_count as i32 * 50, file_count as i32);
+                    }
+                }
+                (0, 0)
+            }
+            "get_dependencies" => {
+                if let Some(file) = args["file"].as_str() {
+                    let output = Command::new("grep")
+                        .args(&["-n", "import\\|use\\|require", file])
+                        .output();
+                    if let Ok(out) = output {
+                        let lines = String::from_utf8_lossy(&out.stdout);
+                        let line_count = lines.lines().count();
+                        return (line_count as i32 * 4, line_count as i32);
+                    }
+                }
+                (0, 0)
+            }
+            "get_dependents" => {
+                if let Some(file) = args["file"].as_str() {
+                    let output = Command::new("grep")
+                        .args(&["-rn", &format!("import.*{}", file), src_path])
+                        .output();
+                    if let Ok(out) = output {
+                        let lines = String::from_utf8_lossy(&out.stdout);
+                        let line_count = lines.lines().count();
+                        return (line_count as i32 * 4, line_count as i32);
+                    }
+                }
+                (0, 0)
+            }
+            "get_context" => {
+                if let Some(file) = args["file"].as_str() {
+                    if let Ok(content) = std::fs::read_to_string(file) {
+                        let chars = content.len() as i32;
+                        return (chars, chars / 80);
+                    }
+                }
+                (0, 0)
+            }
+            "get_impact_radius" => {
+                let depth = args["depth"].as_u64().unwrap_or(3) as i32;
+                (depth * 1000, depth * 100)
+            }
+            _ => (0, 0),
+        }
+    }
+
+    fn count_response_elements(response: &Value) -> i32 {
+        match response {
+            Value::Array(arr) => arr.len() as i32,
+            Value::Object(obj) => {
+                let mut count = 0;
+                for (_, v) in obj {
+                    count += Self::count_response_elements(v);
+                }
+                count
+            }
+            _ => 1,
         }
     }
 

@@ -513,3 +513,257 @@ pub fn get_code_for_requirement(
 
     Ok(entries)
 }
+
+pub fn record_metric(
+    db: &CozoDb,
+    metric: &models::ContextMetric,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let query = r#"?[] <- [[ $id, $tool, $ts, $path, $in_tok, $out_tok, $out_elem, $exec_ms, $base_tok, $base_lines, $saved, $sav_pct, $correct, $total, $f1, $qpat, $qfile, $qdepth, $success ]] :put context_metrics { id, tool_name, timestamp, project_path, input_tokens, output_tokens, output_elements, execution_time_ms, baseline_tokens, baseline_lines_scanned, tokens_saved, savings_percent, correct_elements, total_expected, f1_score, query_pattern, query_file, query_depth, success }"#;
+
+    let mut params = std::collections::BTreeMap::new();
+    params.insert(
+        "id".to_string(),
+        serde_json::Value::String(metric.id.clone()),
+    );
+    params.insert(
+        "tool".to_string(),
+        serde_json::Value::String(metric.tool_name.clone()),
+    );
+    params.insert(
+        "ts".to_string(),
+        serde_json::Value::Number(metric.timestamp.into()),
+    );
+    params.insert(
+        "path".to_string(),
+        serde_json::Value::String(metric.project_path.clone()),
+    );
+    params.insert(
+        "in_tok".to_string(),
+        serde_json::Value::Number(metric.input_tokens.into()),
+    );
+    params.insert(
+        "out_tok".to_string(),
+        serde_json::Value::Number(metric.output_tokens.into()),
+    );
+    params.insert(
+        "out_elem".to_string(),
+        serde_json::Value::Number(metric.output_elements.into()),
+    );
+    params.insert(
+        "exec_ms".to_string(),
+        serde_json::Value::Number(metric.execution_time_ms.into()),
+    );
+    params.insert(
+        "base_tok".to_string(),
+        serde_json::Value::Number(metric.baseline_tokens.into()),
+    );
+    params.insert(
+        "base_lines".to_string(),
+        serde_json::Value::Number(metric.baseline_lines_scanned.into()),
+    );
+    params.insert(
+        "saved".to_string(),
+        serde_json::Value::Number(metric.tokens_saved.into()),
+    );
+    params.insert(
+        "sav_pct".to_string(),
+        serde_json::Value::Number(
+            serde_json::Number::from_f64(metric.savings_percent)
+                .unwrap_or(serde_json::Number::from(0)),
+        ),
+    );
+    params.insert(
+        "correct".to_string(),
+        metric
+            .correct_elements
+            .map(|v| serde_json::Value::Number(v.into()))
+            .unwrap_or(serde_json::Value::Null),
+    );
+    params.insert(
+        "total".to_string(),
+        metric
+            .total_expected
+            .map(|v| serde_json::Value::Number(v.into()))
+            .unwrap_or(serde_json::Value::Null),
+    );
+    params.insert(
+        "f1".to_string(),
+        metric
+            .f1_score
+            .map(|v| {
+                serde_json::Value::Number(
+                    serde_json::Number::from_f64(v).unwrap_or(serde_json::Number::from(0)),
+                )
+            })
+            .unwrap_or(serde_json::Value::Null),
+    );
+    params.insert(
+        "qpat".to_string(),
+        metric
+            .query_pattern
+            .clone()
+            .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null),
+    );
+    params.insert(
+        "qfile".to_string(),
+        metric
+            .query_file
+            .clone()
+            .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null),
+    );
+    params.insert(
+        "qdepth".to_string(),
+        metric
+            .query_depth
+            .map(|v| serde_json::Value::Number(v.into()))
+            .unwrap_or(serde_json::Value::Null),
+    );
+    params.insert(
+        "success".to_string(),
+        serde_json::Value::Bool(metric.success),
+    );
+
+    db.run_script(query, params)?;
+    Ok(())
+}
+
+pub fn get_metrics_summary(
+    db: &CozoDb,
+    tool_filter: Option<&str>,
+    retention_days: i32,
+) -> Result<models::MetricsSummary, Box<dyn std::error::Error>> {
+    let cutoff_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        - (retention_days as i64 * 24 * 60 * 60);
+
+    let mut params = std::collections::BTreeMap::new();
+    params.insert(
+        "cutoff".to_string(),
+        serde_json::Value::Number(cutoff_timestamp.into()),
+    );
+
+    let tool_filter_clause = if let Some(tool) = tool_filter {
+        params.insert(
+            "tool".to_string(),
+            serde_json::Value::String(tool.to_string()),
+        );
+        ", tool_name = $tool"
+    } else {
+        ""
+    };
+
+    let query_base = if tool_filter.is_some() {
+        r#"?[calls, saved, avg_pct] := 
+            *context_metrics[timestamp >= $cutoff, tool_name = $tool],
+            calls := count(),
+            saved := sum(tokens_saved),
+            avg_pct := avg(savings_percent)"#
+    } else {
+        r#"?[calls, saved, avg_pct] := 
+            *context_metrics[timestamp >= $cutoff],
+            calls := count(),
+            saved := sum(tokens_saved),
+            avg_pct := avg(savings_percent)"#
+    };
+
+    let result = db.run_script(query_base, params.clone())?;
+
+    let mut summary = models::MetricsSummary {
+        total_invocations: 0,
+        total_tokens_saved: 0,
+        average_savings_percent: 0.0,
+        retention_days,
+        by_tool: Vec::new(),
+        by_day: Vec::new(),
+    };
+
+    if let Some(row) = result.rows.first() {
+        summary.total_invocations = row[0].as_i64().unwrap_or(0);
+        summary.total_tokens_saved = row[1].as_i64().unwrap_or(0);
+        summary.average_savings_percent = row[2].as_f64().unwrap_or(0.0);
+    }
+
+    let by_tool_query = if tool_filter.is_some() {
+        r#"?[tool_name, calls, total_saved, avg_pct] :=
+            *context_metrics[timestamp >= $cutoff, tool_name = $tool],
+            tool_name = $tool,
+            calls := count(),
+            total_saved := sum(tokens_saved),
+            avg_pct := avg(savings_percent)"#
+    } else {
+        r#"?[tool_name, calls, total_saved, avg_pct] :=
+            *context_metrics[timestamp >= $cutoff],
+            tool_name = $tool,
+            calls := count(),
+            total_saved := sum(tokens_saved),
+            avg_pct := avg(savings_percent)"#
+    };
+
+    let by_tool_result = db.run_script(by_tool_query, params)?;
+    for row in by_tool_result.rows {
+        summary.by_tool.push(models::ToolMetrics {
+            tool_name: row[0].as_str().unwrap_or("").to_string(),
+            calls: row[1].as_i64().unwrap_or(0),
+            total_saved: row[2].as_i64().unwrap_or(0),
+            avg_savings_percent: row[3].as_f64().unwrap_or(0.0),
+        });
+    }
+
+    Ok(summary)
+}
+
+pub fn cleanup_old_metrics(
+    db: &CozoDb,
+    retention_days: i32,
+) -> Result<i64, Box<dyn std::error::Error>> {
+    let cutoff_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        - (retention_days as i64 * 24 * 60 * 60);
+
+    let query = r#"
+        ::count_before_delete
+        ?[count] := *context_metrics[timestamp < $cutoff], count := count()
+    "#;
+
+    let mut params = std::collections::BTreeMap::new();
+    params.insert(
+        "cutoff".to_string(),
+        serde_json::Value::Number(cutoff_timestamp.into()),
+    );
+
+    let count_result = db.run_script(query, params.clone())?;
+    let deleted_count = count_result
+        .rows
+        .first()
+        .and_then(|r| r[0].as_i64())
+        .unwrap_or(0);
+
+    let delete_query = r#"::remove .context_metrics where timestamp < $cutoff"#;
+    db.run_script(delete_query, params)?;
+
+    Ok(deleted_count)
+}
+
+pub fn reset_metrics(db: &CozoDb) -> Result<i64, Box<dyn std::error::Error>> {
+    let query = r#"
+        ::count_before_delete
+        ?[count] := *context_metrics[], count := count()
+    "#;
+    let count_result = db.run_script(query, Default::default())?;
+    let deleted_count = count_result
+        .rows
+        .first()
+        .and_then(|r| r[0].as_i64())
+        .unwrap_or(0);
+
+    let delete_all = r#"::remove .context_metrics"#;
+    db.run_script(delete_all, Default::default())?;
+
+    Ok(deleted_count)
+}

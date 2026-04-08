@@ -63,6 +63,30 @@ fn init_schema(db: &CozoDb) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    if !existing_relations.contains("context_metrics") {
+        let create_context_metrics = r#":create context_metrics {id: String, tool_name: String, timestamp: Int, project_path: String, input_tokens: Int, output_tokens: Int, output_elements: Int, execution_time_ms: Int, baseline_tokens: Int, baseline_lines_scanned: Int, tokens_saved: Int, savings_percent: Float, correct_elements: Int?, total_expected: Int?, f1_score: Float?, query_pattern: String?, query_file: String?, query_depth: Int?, success: Bool}"#;
+        if let Err(e) = db.run_script(create_context_metrics, Default::default()) {
+            eprintln!("Failed to create context_metrics: {:?}", e);
+        }
+
+        let create_tool_index =
+            r#":create context_metrics::tool_name_index {ref: (tool_name), compressed: true}"#;
+        if let Err(e) = db.run_script(create_tool_index, Default::default()) {
+            tracing::debug!("tool_name index may already exist: {:?}", e);
+        }
+
+        let create_timestamp_index =
+            r#":create context_metrics::timestamp_index {ref: (timestamp), compressed: true}"#;
+        if let Err(e) = db.run_script(create_timestamp_index, Default::default()) {
+            tracing::debug!("timestamp index may already exist: {:?}", e);
+        }
+
+        let create_project_index = r#":create context_metrics::project_path_index {ref: (project_path), compressed: true}"#;
+        if let Err(e) = db.run_script(create_project_index, Default::default()) {
+            tracing::debug!("project_path index may already exist: {:?}", e);
+        }
+    }
+
     Ok(())
 }
 

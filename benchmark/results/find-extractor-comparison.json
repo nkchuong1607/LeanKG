@@ -1,24 +1,58 @@
 {
   "overhead": {
     "time_delta": 0.0,
-    "token_delta": 13754,
+    "token_delta": 69,
     "token_delta_percent": 0.0
   },
   "task": "find-extractor",
   "with_leankg": {
     "build_time_seconds": 0.0,
-    "cached_tokens": 16320,
-    "input_tokens": 12833,
+    "cached_tokens": 16800,
+    "context": {
+      "files_referenced": [
+        "src/indexer/extractor.rs",
+        "src/pkg/f.go",
+        "src/tests/whatever_test.rs",
+        "tests/integration_test.rs",
+        "tests/whatever_test.rs",
+        "pkg/math.go",
+        "pkg/person.go",
+        "pkg/io.go",
+        "pkg/f.go",
+        "pkg/math_test.go",
+        "pkg/math_wrong.go",
+        "pkg/math_test.rs",
+        "pkg/math.rs"
+      ]
+    },
+    "input_tokens": 13735,
     "success": true,
     "token_percent": 0.0,
-    "total_tokens": 29660
+    "total_tokens": 30890
   },
   "without_leankg": {
     "build_time_seconds": 0.0,
-    "cached_tokens": 0,
-    "input_tokens": 15872,
+    "cached_tokens": 16512,
+    "context": {
+      "files_referenced": [
+        "src/indexer/extractor.rs",
+        "src/pkg/f.go",
+        "src/tests/whatever_test.rs",
+        "tests/integration_test.rs",
+        "tests/whatever_test.rs",
+        "pkg/math.go",
+        "pkg/person.go",
+        "pkg/io.go",
+        "pkg/f.go",
+        "pkg/math_test.go",
+        "pkg/math_wrong.go",
+        "pkg/math_test.rs",
+        "pkg/math.rs"
+      ]
+    },
+    "input_tokens": 13825,
     "success": true,
     "token_percent": 0.0,
-    "total_tokens": 15906
+    "total_tokens": 30821
   }
 }
