@@ -1,290 +1,284 @@
-use std::collections::BTreeMap;
+use crate::db::schema::CozoDb;
+use serde::{de::DeserializeOwned, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
 
-use cozo::{Db, SqliteStorage};
-use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CacheValue {
-    pub value_json: String,
-    pub created_at: u64,
-    pub ttl_seconds: u64,
-    pub tool_name: String,
-    pub project_path: String,
+#[derive(Clone)]
+struct CacheEntry {
+    value_json: String,
+    created_at: i64,
+    ttl_seconds: i64,
 }
 
-pub struct PersistentCache {
-    db: Db<SqliteStorage>,
-    default_ttl: u64,
-    l1: Arc<RwLock<HashMap<String, CacheValue>>>,
-}
-
-impl PersistentCache {
-    pub fn new(db: Db<SqliteStorage>, default_ttl: u64) -> Self {
-        Self {
-            db,
-            default_ttl,
-            l1: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-
-    pub fn get(&self, key: &str) -> Option<String> {
-        let l1_expired = {
-            let l1 = self.l1.read();
-            if let Some(l1_value) = l1.get(key) {
-                if !self.is_expired(l1_value) {
-                    return Some(l1_value.value_json.clone());
-                }
-                true
-            } else {
-                false
-            }
-        };
-
-        if l1_expired {
-            self.l1.write().remove(key);
-        }
-
-        let key_clone = key.to_string();
-        let result = self.get_from_db(&key_clone);
-        if let Some(ref cached) = result {
-            if !self.is_expired(cached) {
-                self.l1.write().insert(key_clone, cached.clone());
-            }
-        }
-        result.map(|c| c.value_json)
-    }
-
-    pub fn insert(
-        &self,
-        key: String,
-        value_json: String,
-        tool_name: String,
-        project_path: String,
-        ttl_seconds: Option<u64>,
-    ) {
-        let ttl = ttl_seconds.unwrap_or(self.default_ttl);
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        let cache_value = CacheValue {
-            value_json,
-            created_at: now,
-            ttl_seconds: ttl,
-            tool_name,
-            project_path,
-        };
-
-        self.l1.write().insert(key.clone(), cache_value.clone());
-        self.insert_to_db(&key, &cache_value);
-    }
-
-    pub fn invalidate(&self, key: &str) {
-        self.l1.write().remove(key);
-        self.delete_from_db(key);
-    }
-
-    pub fn invalidate_prefix(&self, prefix: &str) {
-        let keys_to_delete: Vec<String> = self
-            .l1
-            .read()
-            .keys()
-            .filter(|k| k.starts_with(prefix))
-            .cloned()
-            .collect();
-
-        for key in keys_to_delete {
-            self.invalidate(&key);
-        }
-    }
-
-    fn is_expired(&self, value: &CacheValue) -> bool {
-        if value.ttl_seconds == 0 {
+impl CacheEntry {
+    fn is_expired(&self) -> bool {
+        if self.ttl_seconds == 0 {
             return true;
         }
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        value.created_at + value.ttl_seconds < now
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        (now - self.created_at) > self.ttl_seconds
     }
+}
 
-    fn get_from_db(&self, key: &str) -> Option<CacheValue> {
-        let query = r#"
-        SELECT cache_key, value_json, created_at, ttl_seconds, tool_name, project_path
-        FROM query_cache
-        WHERE cache_key = $key
-       "#;
+#[derive(Clone)]
+pub struct PersistentCache {
+    db: Arc<CozoDb>,
+    memory: Arc<RwLock<HashMap<String, CacheEntry>>>,
+    default_ttl: u64,
+}
 
-        let mut params = BTreeMap::new();
-        params.insert("key".to_string(), Value::String(key.to_string()));
-
-        match self.db.run_script(query, params) {
-            Ok(result) => {
-                if result.rows.is_empty() {
-                    return None;
-                }
-                let row = &result.rows[0];
-                Some(CacheValue {
-                    value_json: row[1].as_str().unwrap_or("").to_string(),
-                    created_at: row[2].as_str().and_then(|s| s.parse().ok()).unwrap_or(0),
-                    ttl_seconds: row[3].as_str().and_then(|s| s.parse().ok()).unwrap_or(0),
-                    tool_name: row[4].as_str().unwrap_or("").to_string(),
-                    project_path: row[5].as_str().unwrap_or("").to_string(),
-                })
-            }
-            Err(_) => None,
+impl PersistentCache {
+    pub fn new(db: Arc<CozoDb>, default_ttl: u64) -> Self {
+        Self {
+            db,
+            memory: Arc::new(RwLock::new(HashMap::new())),
+            default_ttl,
         }
     }
 
-    fn insert_to_db(&self, key: &str, value: &CacheValue) {
-        let query = r#"
-        INSERT INTO query_cache (cache_key, value_json, created_at, ttl_seconds, tool_name, project_path, metadata)
-        VALUES ($key, $value_json, $created_at, $ttl_seconds, $tool_name, $project_path, '{}')
-       "#;
+    pub fn with_ttl(db: Arc<CozoDb>, ttl_secs: u64) -> Self {
+        Self::new(db, ttl_secs)
+    }
 
-        let mut params = BTreeMap::new();
-        params.insert("key".to_string(), Value::String(key.to_string()));
+    pub async fn get<V: DeserializeOwned>(&self, key: &str) -> Option<V> {
+        if let Some(entry) = self.memory.read().await.get(key) {
+            if !entry.is_expired() {
+                return serde_json::from_str(&entry.value_json).ok();
+            }
+        }
+
+        if let Some(value_json) = self.load_from_db(key).await {
+            if let Ok(v) = serde_json::from_str::<V>(&value_json) {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+                self.memory.write().await.insert(
+                    key.to_string(),
+                    CacheEntry {
+                        value_json: value_json.clone(),
+                        created_at: now,
+                        ttl_seconds: self.default_ttl as i64,
+                    },
+                );
+                return Some(v);
+            }
+        }
+        None
+    }
+
+    pub async fn insert<K: Serialize, V: Serialize>(&self, key: String, value: V) {
+        let value_json = serde_json::to_string(&value).unwrap_or_default();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        self.memory.write().await.insert(
+            key.clone(),
+            CacheEntry {
+                value_json: value_json.clone(),
+                created_at: now,
+                ttl_seconds: self.default_ttl as i64,
+            },
+        );
+
+        self.save_to_db(&key, &value_json, now).await.ok();
+    }
+
+    pub async fn invalidate(&self, key: &str) {
+        self.memory.write().await.remove(key);
+        self.delete_from_db(key).await.ok();
+    }
+
+    pub async fn invalidate_prefix(&self, prefix: &str) {
+        let prefix_owned = prefix.to_string();
+        let keys: Vec<String> = self
+            .memory
+            .read()
+            .await
+            .keys()
+            .filter(|k| k.starts_with(&prefix_owned))
+            .cloned()
+            .collect();
+
+        for key in keys {
+            self.invalidate(&key).await;
+        }
+    }
+
+    async fn load_from_db(&self, key: &str) -> Option<String> {
+        let query = r#"
+            ?[value_json, created_at, ttl_seconds] := 
+                *query_cache[cache_key = $key, value_json, created_at, ttl_seconds]
+        "#;
+        let mut params = std::collections::BTreeMap::new();
+        params.insert(
+            "key".to_string(),
+            serde_json::Value::String(key.to_string()),
+        );
+
+        let result = self.db.run_script(query, params).ok()?;
+
+        let row = result.rows.first()?;
+        let created_at = row.get(1)?.as_i64()?;
+        let ttl_seconds = row.get(2)?.as_i64()?;
+
+        if ttl_seconds > 0 {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            if (now - created_at) > ttl_seconds {
+                self.delete_from_db(key).await.ok();
+                return None;
+            }
+        }
+
+        row.get(0)?.as_str().map(String::from)
+    }
+
+    async fn save_to_db(
+        &self,
+        key: &str,
+        value_json: &str,
+        created_at: i64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let query = r#"
+            ?[cache_key, value_json, created_at, ttl_seconds, tool_name, project_path, metadata] 
+            <- [[ $key, $value_json, $created_at, $ttl_seconds, "unknown", "default", "{}" ]]
+            :put query_cache { cache_key, value_json, created_at, ttl_seconds, tool_name, project_path, metadata }
+        "#;
+        let mut params = std::collections::BTreeMap::new();
+        params.insert(
+            "key".to_string(),
+            serde_json::Value::String(key.to_string()),
+        );
         params.insert(
             "value_json".to_string(),
-            Value::String(value.value_json.clone()),
+            serde_json::Value::String(value_json.to_string()),
         );
         params.insert(
             "created_at".to_string(),
-            Value::Number(serde_json::Number::from(value.created_at)),
+            serde_json::Value::Number(created_at.into()),
         );
         params.insert(
             "ttl_seconds".to_string(),
-            Value::Number(serde_json::Number::from(value.ttl_seconds)),
-        );
-        params.insert(
-            "tool_name".to_string(),
-            Value::String(value.tool_name.clone()),
-        );
-        params.insert(
-            "project_path".to_string(),
-            Value::String(value.project_path.clone()),
+            serde_json::Value::Number((self.default_ttl as i64).into()),
         );
 
-        let _ = self.db.run_script(query, params);
+        self.db.run_script(query, params)?;
+        Ok(())
     }
 
-    fn delete_from_db(&self, key: &str) {
-        let query = r#"DELETE FROM query_cache WHERE cache_key = $key"#;
-        let mut params = BTreeMap::new();
-        params.insert("key".to_string(), Value::String(key.to_string()));
-        let _ = self.db.run_script(query, params);
+    async fn delete_from_db(&self, key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let query = r#":delete query_cache where cache_key = $key"#;
+        let mut params = std::collections::BTreeMap::new();
+        params.insert(
+            "key".to_string(),
+            serde_json::Value::String(key.to_string()),
+        );
+        self.db.run_script(query, params)?;
+        Ok(())
+    }
+
+    pub async fn len(&self) -> usize {
+        self.memory.read().await.len()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
-    use tempfile::tempdir;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    fn create_test_db() -> Db<SqliteStorage> {
-        let temp_dir = tempdir().unwrap();
-        let db_path = temp_dir.path().join("test_cache.db");
-        let path_str = db_path.to_string_lossy().to_string();
-        cozo::new_cozo_sqlite(path_str).unwrap()
+    static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn create_test_db() -> CozoDb {
+        let counter = TEST_DB_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join(format!("leankg_test_persistent_cache_{}.db", counter));
+        let db = crate::db::schema::init_db(&db_path).unwrap();
+        drop(db);
+        std::fs::remove_file(&db_path).ok();
+        crate::db::schema::init_db(&db_path).unwrap()
     }
 
-    fn init_test_schema(db: &Db<SqliteStorage>) {
-        let create_query_cache = r#":create query_cache {
-            cache_key: String,
-            value_json: String,
-            created_at: Int,
-            ttl_seconds: Int,
-            tool_name: String,
-            project_path: String,
-            metadata: String
-        }"#;
-        let _ = db.run_script(create_query_cache, Default::default());
+    #[tokio::test]
+    async fn test_persistent_cache_basic() {
+        let db = Arc::new(create_test_db());
+        let cache = PersistentCache::new(db, 300);
+
+        cache
+            .insert::<String, Vec<String>>("test_key".to_string(), vec!["value1".to_string(), "value2".to_string()])
+            .await;
+
+        let result: Option<Vec<String>> = cache.get("test_key").await;
+        assert!(result.is_some());
+        let values = result.unwrap();
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0], "value1");
     }
 
-    #[test]
-    fn test_persistent_cache_get_returns_cached_value() {
-        let db = create_test_db();
-        init_test_schema(&db);
-
-        let cache = PersistentCache::new(db, 3600);
-
-        cache.insert(
-            "deps:src/main.rs".to_string(),
-            r#"["file1.rs", "file2.rs"]"#.to_string(),
-            "get_dependencies".to_string(),
-            "/project".to_string(),
-            None,
-        );
-
-        let result = cache.get("deps:src/main.rs");
-        assert_eq!(result, Some(r#"["file1.rs", "file2.rs"]"#.to_string()));
-    }
-
-    #[test]
-    fn test_persistent_cache_ttl_expiration() {
-        let db = create_test_db();
-        init_test_schema(&db);
-
+    #[tokio::test]
+    async fn test_persistent_cache_expired() {
+        let db = Arc::new(create_test_db());
         let cache = PersistentCache::new(db, 0);
 
-        cache.insert(
-            "deps:src/main.rs".to_string(),
-            r#"["file1.rs"]"#.to_string(),
-            "get_dependencies".to_string(),
-            "/project".to_string(),
-            Some(0),
-        );
+        cache
+            .insert::<String, Vec<String>>("expired_key".to_string(), vec!["value".to_string()])
+            .await;
 
-        std::thread::sleep(Duration::from_millis(10));
+        tokio::time::sleep(Duration::from_millis(10)).await;
 
-        let result = cache.get("deps:src/main.rs");
-        assert_eq!(result, None);
+        let result: Option<Vec<String>> = cache.get("expired_key").await;
+        assert!(result.is_none());
     }
 
-    #[test]
-    fn test_persistent_cache_invalidate_prefix() {
-        let db = create_test_db();
-        init_test_schema(&db);
+    #[tokio::test]
+    async fn test_persistent_cache_invalidate_prefix() {
+        let db = Arc::new(create_test_db());
+        let cache = PersistentCache::new(db, 300);
 
-        let cache = PersistentCache::new(db, 3600);
+        cache
+            .insert::<String, Vec<String>>("deps:src/main.rs".to_string(), vec!["lib.rs".to_string()])
+            .await;
+        cache
+            .insert::<String, Vec<String>>("deps:src/lib.rs".to_string(), vec!["mod.rs".to_string()])
+            .await;
+        cache
+            .insert::<String, String>("orch:context:src/main.rs".to_string(), "content".to_string())
+            .await;
 
-        cache.insert(
-            "deps:src/file1.rs".to_string(),
-            r#"["a.rs"]"#.to_string(),
-            "get_dependencies".to_string(),
-            "/project".to_string(),
-            None,
-        );
-        cache.insert(
-            "deps:src/file2.rs".to_string(),
-            r#"["b.rs"]"#.to_string(),
-            "get_dependencies".to_string(),
-            "/project".to_string(),
-            None,
-        );
-        cache.insert(
-            "orch:query1".to_string(),
-            r#"{"result": "ok"}"#.to_string(),
-            "orchestrate".to_string(),
-            "/project".to_string(),
-            None,
-        );
+        cache.invalidate_prefix("deps:src/").await;
 
-        cache.invalidate_prefix("deps:");
+        let result1: Option<Vec<String>> = cache.get("deps:src/main.rs").await;
+        assert!(result1.is_none());
 
-        assert_eq!(cache.get("deps:src/file1.rs"), None);
-        assert_eq!(cache.get("deps:src/file2.rs"), None);
-        assert_eq!(
-            cache.get("orch:query1"),
-            Some(r#"{"result": "ok"}"#.to_string())
-        );
+        let result2: Option<Vec<String>> = cache.get("deps:src/lib.rs").await;
+        assert!(result2.is_none());
+
+        let result3: Option<String> = cache.get("orch:context:src/main.rs").await;
+        assert!(result3.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_persistent_cache_invalidate() {
+        let db = Arc::new(create_test_db());
+        let cache = PersistentCache::new(db, 300);
+
+        cache
+            .insert::<String, Vec<String>>("key1".to_string(), vec!["value1".to_string()])
+            .await;
+
+        cache.invalidate("key1").await;
+
+        let result: Option<Vec<String>> = cache.get("key1").await;
+        assert!(result.is_none());
     }
 }

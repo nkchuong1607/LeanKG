@@ -131,6 +131,27 @@ impl GraphEngine {
     ) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
         let normalized = normalize_path(file_path);
         let escaped_normalized = escape_datalog(&normalized);
+
+        let cache = self.cache.clone();
+        let cache_key = normalized.clone();
+
+        let cached_qns = std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async { cache.read().await.get_dependencies(&cache_key).await })
+        }).join().ok().flatten();
+
+        if let Some(cached_qns) = cached_qns {
+            let mut elements = Vec::new();
+            for qn in &cached_qns {
+                if let Some(elem) = self.find_element(qn)? {
+                    elements.push(elem);
+                }
+            }
+            if !elements.is_empty() {
+                tracing::debug!("get_dependencies cache hit for {}", file_path);
+                return Ok(elements);
+            }
+        }
         let query = format!(
             r#"?[target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata], (source_qualified = "{}" or source_qualified = "./{}"), rel_type = "imports""#,
             escaped_normalized, escaped_normalized
@@ -205,6 +226,32 @@ impl GraphEngine {
     ) -> Result<Vec<Relationship>, Box<dyn std::error::Error>> {
         let normalized = normalize_path(target);
         let escaped_normalized = escape_datalog(&normalized);
+
+        let cache = self.cache.clone();
+        let cache_key = normalized.clone();
+
+        let cached_source_qns = std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async { cache.read().await.get_dependents(&cache_key).await })
+        }).join().ok().flatten();
+
+        if let Some(cached_source_qns) = cached_source_qns {
+            if !cached_source_qns.is_empty() {
+                tracing::debug!("get_relationships_for_target cache hit for {}", target);
+                let relationships: Vec<Relationship> = cached_source_qns
+                    .iter()
+                    .map(|source_qn| Relationship {
+                        id: None,
+                        source_qualified: source_qn.clone(),
+                        target_qualified: target.to_string(),
+                        rel_type: "imports".to_string(),
+                        confidence: 1.0,
+                        metadata: serde_json::json!({}),
+                    })
+                    .collect();
+                return Ok(relationships);
+            }
+        }
         let query = format!(
             r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata], (target_qualified = "{}" or target_qualified = "./{}")"#,
             escaped_normalized, escaped_normalized
