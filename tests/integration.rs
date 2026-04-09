@@ -313,3 +313,84 @@ async fn test_get_call_graph_with_real_db() {
     }
 }
 
+#[tokio::test]
+async fn test_persistent_cache_hit_after_insert() {
+    let tmp = TempDir::new().unwrap();
+    let db_path = tmp.path().join("leankg_cache_test.db");
+    let db = init_db(&db_path).unwrap();
+    let graph = GraphEngine::with_persistence(db);
+
+    use leankg::db::models::{CodeElement, Relationship};
+
+    let elem_b = CodeElement {
+        qualified_name: "src/b.rs::mod_b".to_string(),
+        element_type: "module".to_string(),
+        name: "mod_b".to_string(),
+        file_path: "src/b.rs".to_string(),
+        line_start: 1,
+        line_end: 10,
+        language: "rust".to_string(),
+        ..Default::default()
+    };
+    graph.insert_element(&elem_b).unwrap();
+
+    let rel = Relationship {
+        id: None,
+        source_qualified: "src/a.rs".to_string(),
+        target_qualified: "src/b.rs::mod_b".to_string(),
+        rel_type: "imports".to_string(),
+        confidence: 1.0,
+        metadata: serde_json::json!({}),
+    };
+    graph.insert_relationship(&rel).unwrap();
+
+    let deps_first = graph.get_dependencies("src/a.rs").unwrap();
+    assert!(!deps_first.is_empty(), "First call should return results from DB");
+
+    let deps_second = graph.get_dependencies("src/a.rs").unwrap();
+    assert!(!deps_second.is_empty(), "Second call (cache hit) should return results");
+    assert_eq!(deps_first.len(), deps_second.len(), "Cache hit should return same count");
+}
+
+#[tokio::test]
+async fn test_persistent_cache_hit_on_second_call() {
+    let tmp = TempDir::new().unwrap();
+    let db_path = tmp.path().join("leankg_cache_survive_test.db");
+    
+    let db = init_db(&db_path).unwrap();
+    let graph = GraphEngine::with_persistence(db);
+    use leankg::db::models::{CodeElement, Relationship};
+
+    let elem_y = CodeElement {
+        qualified_name: "src/y.rs::mod_y".to_string(),
+        element_type: "module".to_string(),
+        name: "mod_y".to_string(),
+        file_path: "src/y.rs".to_string(),
+        line_start: 1,
+        line_end: 5,
+        language: "rust".to_string(),
+        ..Default::default()
+    };
+    graph.insert_element(&elem_y).unwrap();
+
+    let rel = Relationship {
+        id: None,
+        source_qualified: "src/x.rs".to_string(),
+        target_qualified: "src/y.rs::mod_y".to_string(),
+        rel_type: "imports".to_string(),
+        confidence: 1.0,
+        metadata: serde_json::json!({}),
+    };
+    graph.insert_relationship(&rel).unwrap();
+
+    let deps_first = graph.get_dependencies("src/x.rs").unwrap();
+    assert!(!deps_first.is_empty(), "First call should return results");
+
+    let deps_second = graph.get_dependencies("src/x.rs").unwrap();
+    assert!(
+        !deps_second.is_empty(),
+        "Second call should return results (L1 cache hit)"
+    );
+    assert_eq!(deps_first.len(), deps_second.len(), "Same results expected");
+}
+

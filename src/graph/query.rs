@@ -152,6 +152,7 @@ impl GraphEngine {
                 return Ok(elements);
             }
         }
+
         let query = format!(
             r#"?[target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata], (source_qualified = "{}" or source_qualified = "./{}"), rel_type = "imports""#,
             escaped_normalized, escaped_normalized
@@ -175,7 +176,7 @@ impl GraphEngine {
 
         if !elements.is_empty() {
             let qns: Vec<String> = elements.iter().map(|e| e.qualified_name.clone()).collect();
-            let db_path = file_path.to_string();
+            let db_path = normalize_path(file_path);
             let cache = self.cache.clone();
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().unwrap();
@@ -252,6 +253,7 @@ impl GraphEngine {
                 return Ok(relationships);
             }
         }
+
         let query = format!(
             r#"?[source_qualified, target_qualified, rel_type, confidence, metadata] := *relationships[source_qualified, target_qualified, rel_type, confidence, metadata], (target_qualified = "{}" or target_qualified = "./{}")"#,
             escaped_normalized, escaped_normalized
