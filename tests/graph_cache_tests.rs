@@ -204,272 +204,250 @@ mod query_cache_tests {
 
     use super::*;
 
-    #[tokio::test]
-    async fn test_set_and_get_dependencies() {
+    #[test]
+    fn test_set_and_get_dependencies() {
         let cache = QueryCache::new(60, 100);
         cache
             .set_dependencies(
                 "file1.rs".to_string(),
                 vec!["file2.rs".to_string(), "file3.rs".to_string()],
-            )
-            .await;
+            );
 
-        let result = cache.get_dependencies("file1.rs").await;
+        let result = cache.get_dependencies("file1.rs");
         assert_eq!(
             result,
             Some(vec!["file2.rs".to_string(), "file3.rs".to_string()])
         );
     }
 
-    #[tokio::test]
-    async fn test_set_and_get_dependents() {
+    #[test]
+    fn test_set_and_get_dependents() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependents("file2.rs".to_string(), vec!["file1.rs".to_string()])
-            .await;
+            .set_dependents("file2.rs".to_string(), vec!["file1.rs".to_string()]);
 
-        let result = cache.get_dependents("file2.rs").await;
+        let result = cache.get_dependents("file2.rs");
         assert_eq!(result, Some(vec!["file1.rs".to_string()]));
     }
 
-    #[tokio::test]
-    async fn test_get_dependencies_nonexistent() {
+    #[test]
+    fn test_get_dependencies_nonexistent() {
         let cache = QueryCache::new(60, 100);
-        let result = cache.get_dependencies("nonexistent.rs").await;
+        let result = cache.get_dependencies("nonexistent.rs");
         assert_eq!(result, None);
     }
 
-    #[tokio::test]
-    async fn test_get_dependents_nonexistent() {
+    #[test]
+    fn test_get_dependents_nonexistent() {
         let cache = QueryCache::new(60, 100);
-        let result = cache.get_dependents("nonexistent.rs").await;
+        let result = cache.get_dependents("nonexistent.rs");
         assert_eq!(result, None);
     }
 
-    #[tokio::test]
-    async fn test_invalidate_file_clears_dependencies() {
+    #[test]
+    fn test_invalidate_file_clears_dependencies() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependencies("src/main.rs".to_string(), vec!["lib.rs".to_string()])
-            .await;
+            .set_dependencies("src/main.rs".to_string(), vec!["lib.rs".to_string()]);
 
-        cache.invalidate_file("src/main.rs").await;
+        cache.invalidate_file("src/main.rs");
 
-        let result = cache.get_dependencies("src/main.rs").await;
+        let result = cache.get_dependencies("src/main.rs");
         assert_eq!(result, None);
     }
 
-    #[tokio::test]
-    async fn test_invalidate_file_clears_dependents() {
+    #[test]
+    fn test_invalidate_file_clears_dependents() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependents("src/lib.rs".to_string(), vec!["main.rs".to_string()])
-            .await;
+            .set_dependents("src/lib.rs".to_string(), vec!["main.rs".to_string()]);
 
-        cache.invalidate_file("src/lib.rs").await;
+        cache.invalidate_file("src/lib.rs");
 
-        let result = cache.get_dependents("src/lib.rs").await;
+        let result = cache.get_dependents("src/lib.rs");
         assert_eq!(result, None);
     }
 
-    #[tokio::test]
-    async fn test_invalidate_file_clears_both_caches() {
+    #[test]
+    fn test_invalidate_file_clears_both_caches() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependencies("src/main.rs".to_string(), vec!["lib.rs".to_string()])
-            .await;
+            .set_dependencies("src/main.rs".to_string(), vec!["lib.rs".to_string()]);
         cache
-            .set_dependents("src/main.rs".to_string(), vec!["test.rs".to_string()])
-            .await;
+            .set_dependents("src/main.rs".to_string(), vec!["test.rs".to_string()]);
 
-        cache.invalidate_file("src/main.rs").await;
+        cache.invalidate_file("src/main.rs");
 
-        let deps = cache.get_dependencies("src/main.rs").await;
-        let depts = cache.get_dependents("src/main.rs").await;
+        let deps = cache.get_dependencies("src/main.rs");
+        let depts = cache.get_dependents("src/main.rs");
         assert_eq!(deps, None);
         assert_eq!(depts, None);
     }
 
-    #[tokio::test]
-    async fn test_invalidate_file_with_nested_path() {
+    #[test]
+    fn test_invalidate_file_with_nested_path() {
         let cache = QueryCache::new(60, 100);
         cache
             .set_dependencies(
                 "src/handlers/mod.rs".to_string(),
                 vec!["lib.rs".to_string()],
-            )
-            .await;
+            );
         cache
             .set_dependents(
                 "src/handlers/mod.rs".to_string(),
                 vec!["main.rs".to_string()],
-            )
-            .await;
+            );
 
-        cache.invalidate_file("src/handlers/mod.rs").await;
+        cache.invalidate_file("src/handlers/mod.rs");
 
-        let deps = cache.get_dependencies("src/handlers/mod.rs").await;
-        let depts = cache.get_dependents("src/handlers/mod.rs").await;
+        let deps = cache.get_dependencies("src/handlers/mod.rs");
+        let depts = cache.get_dependents("src/handlers/mod.rs");
         assert_eq!(deps, None);
         assert_eq!(depts, None);
     }
 
-    #[tokio::test]
-    async fn test_invalidate_file_preserves_other_entries() {
+    #[test]
+    fn test_invalidate_file_preserves_other_entries() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependencies("src/file1.rs".to_string(), vec!["lib.rs".to_string()])
-            .await;
+            .set_dependencies("src/file1.rs".to_string(), vec!["lib.rs".to_string()]);
         cache
-            .set_dependencies("src/file2.rs".to_string(), vec!["lib.rs".to_string()])
-            .await;
+            .set_dependencies("src/file2.rs".to_string(), vec!["lib.rs".to_string()]);
 
-        cache.invalidate_file("src/file1.rs").await;
+        cache.invalidate_file("src/file1.rs");
 
-        let file1_deps = cache.get_dependencies("src/file1.rs").await;
-        let file2_deps = cache.get_dependencies("src/file2.rs").await;
+        let file1_deps = cache.get_dependencies("src/file1.rs");
+        let file2_deps = cache.get_dependencies("src/file2.rs");
         assert_eq!(file1_deps, None);
         assert_eq!(file2_deps, Some(vec!["lib.rs".to_string()]));
     }
 
-    #[tokio::test]
-    async fn test_clear_clears_both_dependencies_and_dependents() {
+    #[test]
+    fn test_clear_clears_both_dependencies_and_dependents() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependencies("file1.rs".to_string(), vec!["file2.rs".to_string()])
-            .await;
+            .set_dependencies("file1.rs".to_string(), vec!["file2.rs".to_string()]);
         cache
-            .set_dependents("file2.rs".to_string(), vec!["file1.rs".to_string()])
-            .await;
+            .set_dependents("file2.rs".to_string(), vec!["file1.rs".to_string()]);
 
-        cache.clear().await;
+        cache.clear();
 
-        let deps = cache.get_dependencies("file1.rs").await;
-        let depts = cache.get_dependents("file2.rs").await;
+        let deps = cache.get_dependencies("file1.rs");
+        let depts = cache.get_dependents("file2.rs");
         assert_eq!(deps, None);
         assert_eq!(depts, None);
     }
 
-    #[tokio::test]
-    async fn test_clear_on_empty_cache() {
+    #[test]
+    fn test_clear_on_empty_cache() {
         let cache = QueryCache::new(60, 100);
-        cache.clear().await;
-        let deps = cache.get_dependencies("any.rs").await;
-        let depts = cache.get_dependents("any.rs").await;
+        cache.clear();
+        let deps = cache.get_dependencies("any.rs");
+        let depts = cache.get_dependents("any.rs");
         assert_eq!(deps, None);
         assert_eq!(depts, None);
     }
 
-    #[tokio::test]
-    async fn test_multiple_dependencies_entries() {
+    #[test]
+    fn test_multiple_dependencies_entries() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependencies("a.rs".to_string(), vec!["b.rs".to_string()])
-            .await;
+            .set_dependencies("a.rs".to_string(), vec!["b.rs".to_string()]);
         cache
-            .set_dependencies("c.rs".to_string(), vec!["d.rs".to_string()])
-            .await;
+            .set_dependencies("c.rs".to_string(), vec!["d.rs".to_string()]);
 
         assert_eq!(
-            cache.get_dependencies("a.rs").await,
+            cache.get_dependencies("a.rs"),
             Some(vec!["b.rs".to_string()])
         );
         assert_eq!(
-            cache.get_dependencies("c.rs").await,
+            cache.get_dependencies("c.rs"),
             Some(vec!["d.rs".to_string()])
         );
     }
 
-    #[tokio::test]
-    async fn test_multiple_dependents_entries() {
+    #[test]
+    fn test_multiple_dependents_entries() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependents("b.rs".to_string(), vec!["a.rs".to_string()])
-            .await;
+            .set_dependents("b.rs".to_string(), vec!["a.rs".to_string()]);
         cache
-            .set_dependents("d.rs".to_string(), vec!["c.rs".to_string()])
-            .await;
+            .set_dependents("d.rs".to_string(), vec!["c.rs".to_string()]);
 
         assert_eq!(
-            cache.get_dependents("b.rs").await,
+            cache.get_dependents("b.rs"),
             Some(vec!["a.rs".to_string()])
         );
         assert_eq!(
-            cache.get_dependents("d.rs").await,
+            cache.get_dependents("d.rs"),
             Some(vec!["c.rs".to_string()])
         );
     }
 
-    #[tokio::test]
-    async fn test_update_existing_dependencies() {
+    #[test]
+    fn test_update_existing_dependencies() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependencies("file.rs".to_string(), vec!["old.rs".to_string()])
-            .await;
+            .set_dependencies("file.rs".to_string(), vec!["old.rs".to_string()]);
         cache
-            .set_dependencies("file.rs".to_string(), vec!["new.rs".to_string()])
-            .await;
+            .set_dependencies("file.rs".to_string(), vec!["new.rs".to_string()]);
 
-        let result = cache.get_dependencies("file.rs").await;
+        let result = cache.get_dependencies("file.rs");
         assert_eq!(result, Some(vec!["new.rs".to_string()]));
     }
 
-    #[tokio::test]
-    async fn test_update_existing_dependents() {
+    #[test]
+    fn test_update_existing_dependents() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependents("file.rs".to_string(), vec!["old.rs".to_string()])
-            .await;
+            .set_dependents("file.rs".to_string(), vec!["old.rs".to_string()]);
         cache
-            .set_dependents("file.rs".to_string(), vec!["new.rs".to_string()])
-            .await;
+            .set_dependents("file.rs".to_string(), vec!["new.rs".to_string()]);
 
-        let result = cache.get_dependents("file.rs").await;
+        let result = cache.get_dependents("file.rs");
         assert_eq!(result, Some(vec!["new.rs".to_string()]));
     }
 
-    #[tokio::test]
-    async fn test_empty_vec_dependencies() {
+    #[test]
+    fn test_empty_vec_dependencies() {
         let cache = QueryCache::new(60, 100);
-        cache.set_dependencies("file.rs".to_string(), vec![]).await;
+        cache.set_dependencies("file.rs".to_string(), vec![]);
 
-        let result = cache.get_dependencies("file.rs").await;
+        let result = cache.get_dependencies("file.rs");
         assert_eq!(result, Some(vec![]));
     }
 
-    #[tokio::test]
-    async fn test_empty_vec_dependents() {
+    #[test]
+    fn test_empty_vec_dependents() {
         let cache = QueryCache::new(60, 100);
-        cache.set_dependents("file.rs".to_string(), vec![]).await;
+        cache.set_dependents("file.rs".to_string(), vec![]);
 
-        let result = cache.get_dependents("file.rs").await;
+        let result = cache.get_dependents("file.rs");
         assert_eq!(result, Some(vec![]));
     }
 
-    #[tokio::test]
-    async fn test_concurrent_dependencies_access() {
+    #[test]
+    fn test_concurrent_dependencies_access() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependencies("file.rs".to_string(), vec!["dep.rs".to_string()])
-            .await;
+            .set_dependencies("file.rs".to_string(), vec!["dep.rs".to_string()]);
 
         let cache_clone = cache.clone();
-        let handle = tokio::spawn(async move { cache_clone.get_dependencies("file.rs").await });
+        let handle = std::thread::spawn(move || { cache_clone.get_dependencies("file.rs") });
 
-        let result = handle.await.unwrap();
+        let result = handle.join().unwrap();
         assert_eq!(result, Some(vec!["dep.rs".to_string()]));
     }
 
-    #[tokio::test]
-    async fn test_invalidate_nonexistent_file() {
+    #[test]
+    fn test_invalidate_nonexistent_file() {
         let cache = QueryCache::new(60, 100);
         cache
-            .set_dependencies("real.rs".to_string(), vec!["dep.rs".to_string()])
-            .await;
+            .set_dependencies("real.rs".to_string(), vec!["dep.rs".to_string()]);
 
-        cache.invalidate_file("nonexistent.rs").await;
+        cache.invalidate_file("nonexistent.rs");
 
-        let result = cache.get_dependencies("real.rs").await;
+        let result = cache.get_dependencies("real.rs");
         assert_eq!(result, Some(vec!["dep.rs".to_string()]));
     }
 }
