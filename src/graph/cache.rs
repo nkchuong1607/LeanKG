@@ -213,19 +213,22 @@ mod tests {
     #[test]
     fn test_query_cache_dependencies() {
         let cache = QueryCache::new(60, 100);
-        cache
-            .set_dependencies("file1.rs".to_string(), vec!["file2.rs".to_string()]);
-        let result = cache.get_dependencies("file1.rs");
-        assert_eq!(result, Some(vec!["file2.rs".to_string()]));
+        
+        crate::runtime::run_blocking(async {
+            cache.set_dependencies("file1.rs".to_string(), vec!["file2.rs".to_string()]).await;
+            let result = cache.get_dependencies("file1.rs").await;
+            assert_eq!(result, Some(vec!["file2.rs".to_string()]));
+        });
     }
 
     #[test]
     fn test_query_cache_invalidate() {
         let cache = QueryCache::new(60, 100);
-        cache
-            .set_dependencies("src/file1.rs".to_string(), vec!["file2.rs".to_string()]);
-        cache.invalidate_file("src/file1.rs");
-        let result = cache.get_dependencies("src/file1.rs");
-        assert_eq!(result, None);
+        crate::runtime::run_blocking(async {
+            cache.set_dependencies("src/file1.rs".to_string(), vec!["file2.rs".to_string()]).await;
+            cache.invalidate_file("src/file1.rs").await;
+            let result = cache.get_dependencies("src/file1.rs").await;
+            assert_eq!(result, None);
+        });
     }
 }

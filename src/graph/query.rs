@@ -16,14 +16,14 @@ fn normalize_path(path: &str) -> String {
 #[derive(Clone)]
 pub struct GraphEngine {
     db: CozoDb,
-    cache: Arc<RwLock<QueryCache>>,
+    cache: QueryCache,
 }
 
 impl GraphEngine {
     pub fn new(db: CozoDb) -> Self {
         Self {
             db,
-            cache: Arc::new(RwLock::new(QueryCache::new(300, 1000))),
+            cache: QueryCache::new(300, 1000),
         }
     }
 
@@ -31,7 +31,7 @@ impl GraphEngine {
     pub fn with_cache(db: CozoDb, cache: QueryCache) -> Self {
         Self {
             db,
-            cache: Arc::new(RwLock::new(cache)),
+            cache,
         }
     }
 
@@ -40,7 +40,7 @@ impl GraphEngine {
         let cache = QueryCache::with_persistence(db_arc.clone(), 300, 1000);
         Self {
             db: (*db_arc).clone(),
-            cache: Arc::new(RwLock::new(cache)),
+            cache,
         }
     }
 
@@ -131,10 +131,7 @@ impl GraphEngine {
         let cache = self.cache.clone();
         let cache_key = normalized.clone();
 
-        let cached_qns = std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async { cache.read().get_dependencies(&cache_key).await })
-        }).join().ok().flatten();
+        let cached_qns = crate::runtime::run_blocking(async { cache.get_dependencies(&cache_key).await });
 
         if let Some(cached_qns) = cached_qns {
             let mut elements = Vec::new();
@@ -174,11 +171,8 @@ impl GraphEngine {
             let qns: Vec<String> = elements.iter().map(|e| e.qualified_name.clone()).collect();
             let db_path = normalize_path(file_path);
             let cache = self.cache.clone();
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    cache.read().set_dependencies(db_path, qns).await;
-                });
+            crate::runtime::get_runtime().spawn(async move {
+                cache.set_dependencies(db_path, qns).await;
             });
         }
 
@@ -226,10 +220,7 @@ impl GraphEngine {
         let cache = self.cache.clone();
         let cache_key = normalized.clone();
 
-        let cached_source_qns = std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async { cache.read().get_dependents(&cache_key).await })
-        }).join().ok().flatten();
+        let cached_source_qns = crate::runtime::run_blocking(async { cache.get_dependents(&cache_key).await });
 
         if let Some(cached_source_qns) = cached_source_qns {
             if !cached_source_qns.is_empty() {
@@ -276,11 +267,8 @@ impl GraphEngine {
             let qns: Vec<String> = relationships.iter().map(|r| r.target_qualified.clone()).collect();
             let cache = self.cache.clone();
             let t = target.to_string();
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    cache.read().set_dependents(t, qns).await;
-                });
+            crate::runtime::get_runtime().spawn(async move {
+                cache.set_dependents(t, qns).await;
             });
         }
 
@@ -595,14 +583,15 @@ impl GraphEngine {
             self.db.run_script(query, params)?;
         }
 
-        if let Some(first) = elements.first() {
+        let mut unique_files = std::collections::HashSet::new();
+        for element in elements {
+            unique_files.insert(element.file_path.clone());
+        }
+
+        for fp in unique_files {
             let cache = self.cache.clone();
-            let fp = first.file_path.clone();
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    cache.read().invalidate_file(&fp).await;
-                });
+            crate::runtime::get_runtime().spawn(async move {
+                cache.invalidate_file(&fp).await;
             });
         }
 
@@ -642,12 +631,9 @@ impl GraphEngine {
 
         let cache = self.cache.clone();
         let fp = element.file_path.clone();
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                cache.read().invalidate_file(&fp).await;
+        crate::runtime::get_runtime().spawn(async move {
+                cache.invalidate_file(&fp).await;
             });
-        });
 
         Ok(())
     }
@@ -739,12 +725,9 @@ impl GraphEngine {
 
         let cache = self.cache.clone();
         let fp = file_path.to_string();
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                cache.read().invalidate_file(&fp).await;
+        crate::runtime::get_runtime().spawn(async move {
+                cache.invalidate_file(&fp).await;
             });
-        });
         
         Ok(())
     }
@@ -761,12 +744,9 @@ impl GraphEngine {
 
         let cache = self.cache.clone();
         let s = source.to_string();
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                cache.read().invalidate_file(&s).await;
+        crate::runtime::get_runtime().spawn(async move {
+                cache.invalidate_file(&s).await;
             });
-        });
         
         Ok(())
     }
