@@ -12,6 +12,7 @@ pub struct ParserManager {
     pub c_sharp_parser: Parser,
     pub ruby_parser: Parser,
     pub php_parser: Parser,
+    pub xml_parser: Parser,
 }
 
 impl ParserManager {
@@ -27,6 +28,7 @@ impl ParserManager {
             c_sharp_parser: Parser::new(),
             ruby_parser: Parser::new(),
             php_parser: Parser::new(),
+            xml_parser: Parser::new(),
         }
     }
 
@@ -41,6 +43,7 @@ impl ParserManager {
         let c_sharp_lang: tree_sitter::Language = tree_sitter_c_sharp::LANGUAGE.into();
         let ruby_lang: tree_sitter::Language = tree_sitter_ruby::LANGUAGE.into();
         let php_lang: tree_sitter::Language = tree_sitter_php::LANGUAGE_PHP.into();
+        let xml_lang: tree_sitter::Language = tree_sitter_xml::LANGUAGE_XML.into();
 
         self.go_parser.set_language(&go_lang)?;
         self.ts_parser.set_language(&ts_lang)?;
@@ -52,6 +55,7 @@ impl ParserManager {
         self.c_sharp_parser.set_language(&c_sharp_lang)?;
         self.ruby_parser.set_language(&ruby_lang)?;
         self.php_parser.set_language(&php_lang)?;
+        self.xml_parser.set_language(&xml_lang)?;
 
         Ok(())
     }
@@ -68,6 +72,7 @@ impl ParserManager {
             "csharp" | "cs" => Some(&mut self.c_sharp_parser),
             "ruby" | "rb" => Some(&mut self.ruby_parser),
             "php" => Some(&mut self.php_parser),
+            "xml" => Some(&mut self.xml_parser),
             _ => None,
         }
     }
@@ -239,4 +244,3 @@ mod tests {
         }
     }
 }
-
