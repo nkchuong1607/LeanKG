@@ -1978,7 +1978,8 @@ class UserServiceTest {
             let extractor = EntityExtractor::new(source, "User.ts", "typescript");
             let (_, relationships) = extractor.extract(&tree);
             
-            let has_method: Vec<_> = relationships.iter().filter(|r| r.rel_type == "has_method").collect();
+            // TS now unifies method relationships to 'contains'
+            let has_method: Vec<_> = relationships.iter().filter(|r| r.rel_type == "contains" && (r.target_qualified.ends_with("::constructor") || r.target_qualified.ends_with("::getName"))).collect();
             assert_eq!(has_method.len(), 2); // constructor and getName
 
             let has_prop: Vec<_> = relationships.iter().filter(|r| r.rel_type == "has_property").collect();
