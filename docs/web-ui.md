@@ -19,6 +19,8 @@ Open **http://localhost:8080** in your browser.
 
 ## Features
 
+![LeanKG Graph Visualization](screenshots/graph.png)
+
 - **Force-Directed Graph Physics** -- Watch your codebase dynamically reorganize into stable clusters. Structural hierarchies form heavy planetary cores while lightweight cross-references orbit around them.
 - **WebGL Node Selection & Traversal** -- Instant filtering by module or component types.
 - **Resizable Source Code Viewer** -- Click any logical component (Method, Function, Class) to instantly side-load the syntax-highlighted source code via a draggable layout. 
