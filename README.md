@@ -425,11 +425,13 @@ See [AB Testing Results](docs/analysis/ab-testing-results-2026-04-08.md) for det
 
 Start the web UI with `leankg web` or `leankg serve` and open [http://localhost:8080](http://localhost:8080).
 
-### Graph Viewer
+### Graph Viewer & Code Inspector
 
-![LeanKG Graph Visualization](docs/screenshots/graph.png)
-
-The graph viewer provides an interactive visualization of your codebase's dependency graph. Filter by element type, zoom, pan, and click nodes for details.
+The newly reconstructed **LeanKG Web UI** provides full architectural parity with the GitNexus visualizer:
+- **Force-Directed Physics:** Utilizes `Sigma.js` and `ForceAtlas2` to render a beautifully balanced, fully-centered, spherical dependency map of your codebase.
+- **Node Highlighting & Search:** Instant WebGL-based node and edge filtering without triggering expensive React re-renders.
+- **Community Clustering:** Uses Louvain algorithms and deep structural gravity (`CONTAINS` edges) to accurately cluster related modules, functions, and classes visually.
+- **Resizable Code Viewer:** Click any node to open a dynamic code inspector pane.
 
 See [Web UI](docs/web-ui.md) for detailed documentation.
 
