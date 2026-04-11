@@ -2,13 +2,20 @@ pub mod cicd;
 pub mod extractor;
 pub mod git;
 pub mod parser;
+pub mod process_processor;
 pub mod terraform;
+
+pub mod config_extractor;
+pub mod framework_detector;
 
 pub use cicd::*;
 pub use extractor::*;
 pub use git::*;
 pub use parser::*;
+pub use process_processor::*;
 pub use terraform::*;
+pub use config_extractor::*;
+pub use framework_detector::*;
 
 use crate::db::models::{CodeElement, Relationship};
 use crate::graph::GraphEngine;
@@ -19,7 +26,8 @@ use walkdir::WalkDir;
 
 pub fn find_files_sync(root: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut files = Vec::new();
-    let extensions = ["go", "ts", "js", "py", "rs", "java", "tf", "yml", "yaml"];
+    let extensions = ["go", "ts", "js", "py", "rs", "java", "tf", "yml", "yaml", "json", "toml", "mod"];
+    let config_files = ["package.json", "tsconfig.json", "Cargo.toml", "go.mod"];
 
     for entry in WalkDir::new(root)
         .follow_links(true)
@@ -28,8 +36,16 @@ pub fn find_files_sync(root: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     {
         let path = entry.path();
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        
+        let is_valid_file = if config_files.contains(&file_name) {
+            true
+        } else {
+            extensions.contains(&ext) || is_cicd_yaml_file(path)
+        };
+
         if path.is_file()
-            && (extensions.contains(&ext) || is_cicd_yaml_file(path))
+            && is_valid_file
             && !path.to_string_lossy().contains("node_modules")
             && !path.to_string_lossy().contains("vendor")
             && !path.to_string_lossy().contains(".git")
@@ -69,6 +85,12 @@ fn get_language(file_path: &str) -> Option<&'static str> {
         Some("java")
     } else if file_path.ends_with(".kt") || file_path.ends_with(".kts") {
         Some("kotlin")
+    } else if file_path.ends_with("package.json") || file_path.ends_with("tsconfig.json") {
+        Some("package_json")
+    } else if file_path.ends_with("Cargo.toml") {
+        Some("cargo_toml")
+    } else if file_path.ends_with("go.mod") {
+        Some("go_mod")
     } else {
         None
     }
@@ -86,6 +108,22 @@ fn extract_elements_for_file(file_path: &str) -> Result<ParsedFile, Box<dyn std:
 
     if is_cicd_yaml_file(std::path::Path::new(file_path)) && (file_path.ends_with(".yml") || file_path.ends_with(".yaml")) {
         let extractor = crate::indexer::CicdYamlExtractor::new(source, file_path);
+        let (elements, relationships) = extractor.extract();
+        return Ok(ParsedFile { element_count: elements.len(), elements, relationships });
+    }
+
+    let file_name = std::path::Path::new(file_path).file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if file_name == "package.json" || file_name == "tsconfig.json" {
+        let file_type = if file_name == "package.json" { "package_json" } else { "tsconfig_json" };
+        let extractor = crate::indexer::ConfigExtractor::new(source, file_path, file_type);
+        let (elements, relationships) = extractor.extract();
+        return Ok(ParsedFile { element_count: elements.len(), elements, relationships });
+    } else if file_name == "Cargo.toml" {
+        let extractor = crate::indexer::ConfigExtractor::new(source, file_path, "cargo_toml");
+        let (elements, relationships) = extractor.extract();
+        return Ok(ParsedFile { element_count: elements.len(), elements, relationships });
+    } else if file_name == "go.mod" {
+        let extractor = crate::indexer::ConfigExtractor::new(source, file_path, "go_mod");
         let (elements, relationships) = extractor.extract();
         return Ok(ParsedFile { element_count: elements.len(), elements, relationships });
     }
@@ -160,8 +198,17 @@ pub fn index_files_parallel(
 
     eprintln!("\r  Parsed {}/{} files", total_count, total_count);
 
+    let (mut structure_elements, mut structure_rels) = generate_physical_structure(
+        std::env::current_dir().unwrap_or_default().to_str().unwrap_or("."),
+        files
+    );
+
     let mut all_elements = Vec::new();
     let mut all_relationships = Vec::new();
+    
+    all_elements.append(&mut structure_elements);
+    all_relationships.append(&mut structure_rels);
+    
     let mut total = 0;
 
     for result in results {
@@ -176,6 +223,30 @@ pub fn index_files_parallel(
             }
         }
     }
+
+    if verbose {
+        eprintln!("Detecting execution flows and processes...");
+    }
+    
+    let process_result = detect_processes(&all_elements, &all_relationships, None);
+    if verbose {
+        eprintln!("  Detected {} execution flows spanning {} relationships", 
+            process_result.process_elements.len(), 
+            process_result.process_relationships.len()
+        );
+    }
+    all_elements.extend(process_result.process_elements);
+    all_relationships.extend(process_result.process_relationships);
+
+    if verbose {
+        eprintln!("Detecting frameworks...");
+    }
+    let (fw_elements, fw_rels) = FrameworkDetector::detect_frameworks(&all_elements, &all_relationships);
+    if verbose {
+        eprintln!("  Detected {} frameworks", fw_elements.len());
+    }
+    all_elements.extend(fw_elements);
+    all_relationships.extend(fw_rels);
 
     eprintln!("Inserting {} elements and {} relationships...", all_elements.len(), all_relationships.len());
 
@@ -484,8 +555,17 @@ where
 
     let mut indexed_files = 0;
     let mut skipped_files = 0;
+    
+    let (mut structure_elements, mut structure_rels) = generate_physical_structure(
+        std::env::current_dir().unwrap_or_default().to_str().unwrap_or("."),
+        &files
+    );
+
     let mut all_elements = Vec::new();
     let mut all_relationships = Vec::new();
+    
+    all_elements.append(&mut structure_elements);
+    all_relationships.append(&mut structure_rels);
 
     for (file_path, result) in results {
         match result {
@@ -527,3 +607,109 @@ where
         skipped_files,
     })
 }
+
+pub fn generate_physical_structure(repo_root: &str, files: &[String]) -> (Vec<CodeElement>, Vec<Relationship>) {
+    let mut elements = Vec::new();
+    let mut relationships = Vec::new();
+    let mut seen_folders = std::collections::HashSet::new();
+
+    let root_name = std::path::Path::new(repo_root)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| repo_root.to_string());
+
+    elements.push(CodeElement {
+        qualified_name: repo_root.to_string(),
+        element_type: "Project".to_string(),
+        name: root_name,
+        file_path: repo_root.to_string(),
+        ..Default::default()
+    });
+
+    for file in files {
+        let path = std::path::Path::new(file);
+
+        elements.push(CodeElement {
+            qualified_name: file.to_string(),
+            element_type: "File".to_string(),
+            name: path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+            file_path: file.to_string(),
+            ..Default::default()
+        });
+
+        let current_dir = path.parent();
+        if let Some(parent) = current_dir {
+            let parent_str = parent.to_string_lossy().into_owned();
+            
+            relationships.push(Relationship {
+                id: None,
+                source_qualified: if parent_str.is_empty() { repo_root.to_string() } else { parent_str.clone() },
+                target_qualified: file.to_string(),
+                rel_type: "contains".to_string(),
+                confidence: 1.0,
+                metadata: serde_json::json!({}),
+            });
+
+            let mut node_dir = parent;
+            while let Some(current_str) = node_dir.to_str() {
+                if current_str.is_empty() {
+                    break;
+                }
+
+                if !seen_folders.contains(current_str) {
+                    seen_folders.insert(current_str.to_string());
+                    
+                    let dir_name = node_dir.file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| current_str.to_string());
+
+                    elements.push(CodeElement {
+                        qualified_name: current_str.to_string(),
+                        element_type: "Folder".to_string(),
+                        name: dir_name,
+                        file_path: current_str.to_string(),
+                        ..Default::default()
+                    });
+
+                    let parent_of_dir = node_dir.parent().unwrap_or(std::path::Path::new(""));
+                    let target = if parent_of_dir.as_os_str().is_empty() {
+                        repo_root.to_string()
+                    } else {
+                        parent_of_dir.to_string_lossy().into_owned()
+                    };
+
+                    relationships.push(Relationship {
+                        id: None,
+                        source_qualified: target,
+                        target_qualified: current_str.to_string(),
+                        rel_type: "contains".to_string(),
+                        confidence: 1.0,
+                        metadata: serde_json::json!({}),
+                    });
+                }
+                
+                node_dir = match node_dir.parent() {
+                    Some(p) => {
+                        if p.as_os_str().is_empty() {
+                            break;
+                        }
+                        p
+                    },
+                    None => break,
+                };
+            }
+        } else {
+            relationships.push(Relationship {
+                id: None,
+                source_qualified: repo_root.to_string(),
+                target_qualified: file.to_string(),
+                rel_type: "contains".to_string(),
+                confidence: 1.0,
+                metadata: serde_json::json!({}),
+            });
+        }
+    }
+
+    (elements, relationships)
+}
+

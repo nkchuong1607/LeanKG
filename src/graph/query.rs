@@ -282,6 +282,16 @@ impl GraphEngine {
         self.get_relationships_for_target(target)
     }
 
+    pub fn run_raw_query(
+        &self,
+        query: &str,
+    ) -> Result<cozo::NamedRows, Box<dyn std::error::Error + Send + Sync>> {
+        self.db.run_script(query, Default::default()).map_err(|e| {
+            let msg = e.to_string();
+            Box::new(std::io::Error::new(std::io::ErrorKind::Other, msg)) as Box<dyn std::error::Error + Send + Sync>
+        })
+    }
+
     pub fn all_elements(&self) -> Result<Vec<CodeElement>, Box<dyn std::error::Error>> {
         let query = r#"?[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata] := *code_elements[qualified_name, element_type, name, file_path, line_start, line_end, language, parent_qualified, cluster_id, cluster_label, metadata]"#;
 

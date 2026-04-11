@@ -384,6 +384,22 @@ impl ToolRegistry {
                     "required": []
                 }),
             },
+            ToolDefinition {
+                name: "run_raw_query".to_string(),
+                description: "Execute a raw Datalog/Cypher query against the LeanKG CozoDB engine".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "The CozoDB Datalog query to execute"},
+                        "params": {
+                            "type": "object",
+                            "description": "Optional parameters for the parameterized query",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": ["query"]
+                }),
+            },
         ]
     }
 }

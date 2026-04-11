@@ -182,6 +182,7 @@ impl ToolHandler {
             "mcp_hello" => self.mcp_hello(arguments),
             "get_clusters" => self.get_clusters(arguments),
             "get_cluster_context" => self.get_cluster_context(arguments),
+            "run_raw_query" => self.run_raw_query(arguments),
             _ => Err(format!("Unknown tool: {}", tool_name)),
         };
 
@@ -1532,6 +1533,17 @@ impl ToolHandler {
                 "avg_cluster_size": stats.avg_cluster_size
             }
         }))
+    }
+
+    fn run_raw_query(&self, args: &Value) -> Result<Value, String> {
+        let query = args["query"].as_str().ok_or("Missing 'query' parameter")?;
+        
+        let result = self.graph_engine.run_raw_query(query).map_err(|e| e.to_string())?;
+
+        let value = serde_json::to_value(&result)
+            .map_err(|e| format!("Failed to serialize result: {}", e))?;
+            
+        Ok(value)
     }
 
     fn get_cluster_context(&self, args: &Value) -> Result<Value, String> {
